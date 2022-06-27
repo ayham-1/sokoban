@@ -5,7 +5,7 @@ const game = @import("game.zig");
 const raylib = @import("raylib/raylib.zig");
 
 pub fn main() anyerror!void {
-    try game.start();
+    game.start();
     defer game.stop();
 
     while (!raylib.WindowShouldClose()) {

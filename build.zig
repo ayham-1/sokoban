@@ -4,6 +4,7 @@ const fs = std.fs;
 pub const APP_NAME = "sokoban";
 const raylibSrc = "src/raylib/raylib/src/";
 const bindingSrc = "src/raylib/";
+const emscriptenShell = "src/sokoshell.html";
 
 pub fn build(b: *std.build.Builder) !void {
     const target = b.standardTargetOptions(.{});
@@ -104,8 +105,8 @@ pub fn build(b: *std.build.Builder) !void {
             lib.install();
 
             const shell = switch (mode) {
-                .Debug => emscriptenSrc ++ "shell.html",
-                else => emscriptenSrc ++ "minshell.html",
+                .Debug => emscriptenShell,
+                else => emscriptenShell,
             };
 
             const emcc = b.addSystemCommand(&.{
