@@ -9,10 +9,11 @@ var alloc = zalloc.allocator();
 
 pub fn main() anyerror!void {
     var testMap =
-        \\#www#www#
-        \\w...w...w
-        \\w.p.b.d.w
-        \\wwwwwwwww
+        \\#www#www#wwwwww#
+        \\w...w...w......w
+        \\w.p.b.d........w
+        \\w.bdw..bw......w
+        \\wwwwwwwwwwwwwww#
         \\
     ;
 

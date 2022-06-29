@@ -27,10 +27,11 @@ export fn emsc_set_window_size(width: c_int, height: c_int) callconv(.C) void {
 
 fn safeMain() !c_int {
     var testMap =
-        \\#www#www#
-        \\w...w...w
-        \\w.p.b.d.w
-        \\wwwwwwwww
+        \\#www#www#wwwwww#
+        \\w...w...w......w
+        \\w.p.b.d........w
+        \\w.bdw..bw......w
+        \\wwwwwwwwwwwwwww#
         \\
     ;
 

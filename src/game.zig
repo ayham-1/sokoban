@@ -17,11 +17,14 @@ const TexType = enum(u8) {
     boxDocked = 'x',
     worker = 'p',
     workerDocked = 'X',
-    non = '#',
+    none = '#',
     next = '\n',
 };
 
-const ActType = enum(u4) { up, down, left, right };
+const ActType = enum(u5) { up, down, left, right, none };
+const Pos = struct { x: usize, y: usize };
+
+var alloc = zalloc.allocator();
 
 var screenWidth: i32 = undefined;
 var screenHeight: i32 = undefined;
@@ -33,14 +36,12 @@ var texBoxDocked: raylib.Texture2D = undefined;
 var texWorker: raylib.Texture2D = undefined;
 var texWorkerDocked: raylib.Texture2D = undefined;
 
-var alloc = zalloc.allocator();
 var map: std.ArrayList(std.ArrayList(TexType)) = undefined;
 var mapSizeWidth: i32 = undefined;
 var mapSizeHeight: i32 = undefined;
 
-const Pos = struct { x: usize, y: usize };
-
 var workerPos: Pos = undefined;
+var workerMovedToTex: TexType = TexType.floor;
 
 pub fn start(givenMap: []u8) !void {
     map = try buildMap(givenMap);
@@ -50,7 +51,7 @@ pub fn start(givenMap: []u8) !void {
 
     raylib.SetConfigFlags(.FLAG_MSAA_4X_HINT);
     raylib.InitWindow(screenWidth, screenHeight, "sokoban");
-    raylib.SetTargetFPS(16);
+    raylib.SetTargetFPS(21);
 
     texFloor = raylib.LoadTexture("assets/floor.png");
     texWall = raylib.LoadTexture("assets/wall.png");
@@ -81,18 +82,20 @@ pub fn loop(dt: f32) void {
 
     // Update
     {
-        var act: ActType = undefined;
+        var moveResult: bool = true;
         if (raylib.IsKeyPressed(.KEY_D) or raylib.IsKeyPressed(.KEY_RIGHT)) {
-            act = ActType.right;
+            moveResult = move(ActType.right);
         } else if (raylib.IsKeyPressed(.KEY_A) or raylib.IsKeyPressed(.KEY_LEFT)) {
-            act = ActType.left;
+            moveResult = move(ActType.left);
         } else if (raylib.IsKeyPressed(.KEY_W) or raylib.IsKeyPressed(.KEY_UP)) {
-            act = ActType.up;
+            moveResult = move(ActType.up);
         } else if (raylib.IsKeyPressed(.KEY_S) or raylib.IsKeyPressed(.KEY_DOWN)) {
-            act = ActType.down;
+            moveResult = move(ActType.down);
+        } else {
+            moveResult = move(ActType.none);
         }
 
-        if (act != undefined and !move(act)) {
+        if (!moveResult) {
             log.warn("Can't move there!", .{});
         }
     }
@@ -118,7 +121,7 @@ pub fn loop(dt: f32) void {
                     .boxDocked => &texBoxDocked,
                     .worker => &texWorker,
                     .workerDocked => &texWorkerDocked,
-                    .non => {
+                    .none => {
                         continue :columned;
                     },
                     .next => {
@@ -133,29 +136,62 @@ pub fn loop(dt: f32) void {
 }
 
 pub fn move(act: ActType) bool {
-    const destTex: TexType = getTexDirection(act);
-    const workerNewPos: Pos = getWorkerNewPos(act);
-    if (destTex == TexType.floor or destTex == TexType.box or destTex == TexType.boxDocked) {
-        log.warn("{}", .{workerNewPos});
-        map.items[workerNewPos.x].items[workerNewPos.y] = TexType.worker;
-        map.items[workerPos.y].items[workerPos.x] = TexType.floor;
+    if (act == ActType.none) return true;
+
+    const destTex: TexType = getTexDirection(workerPos, act);
+    const workerNewPos: Pos = getNewPos(workerPos, act);
+
+    if (destTex == TexType.floor) {
+        map.items[workerNewPos.y].items[workerNewPos.x] = TexType.worker;
+        map.items[workerPos.y].items[workerPos.x] = workerMovedToTex;
+        workerMovedToTex = TexType.floor;
         workerPos = workerNewPos;
-        return true;
+    } else if (destTex == TexType.box or destTex == TexType.boxDocked) {
+        const boxDestTex: TexType = getTexDirection(workerNewPos, act);
+        const boxNewPos: Pos = getNewPos(workerNewPos, act);
+
+        map.items[boxNewPos.y].items[boxNewPos.x] = switch (boxDestTex) {
+            .floor => TexType.box,
+            .dock => TexType.boxDocked,
+            else => {
+                return false;
+            },
+        };
+
+        map.items[workerNewPos.y].items[workerNewPos.x] = switch (destTex) {
+            .box => TexType.worker,
+            .boxDocked => TexType.workerDocked,
+            else => unreachable,
+        };
+        map.items[workerPos.y].items[workerPos.x] = workerMovedToTex;
+
+        workerMovedToTex = switch (destTex) {
+            .box => TexType.floor,
+            .boxDocked => TexType.dock,
+            else => unreachable,
+        };
+        workerPos = workerNewPos;
+    } else if (destTex == TexType.dock) {
+        map.items[workerNewPos.y].items[workerNewPos.x] = TexType.workerDocked;
+        map.items[workerPos.y].items[workerPos.x] = TexType.floor;
+        workerMovedToTex = TexType.dock;
+        workerPos = workerNewPos;
     } else {
         return false;
     }
+    return true;
 }
 
-fn getTexDirection(act: ActType) TexType {
-    const workerNewPos: Pos = getWorkerNewPos(act);
-    if (!isWorkerPosValid(workerNewPos)) {
-        return TexType.non;
+fn getTexDirection(pos: Pos, act: ActType) TexType {
+    const newPos: Pos = getNewPos(pos, act);
+    if (!isPosValid(newPos)) {
+        return TexType.none;
     } else {
-        return map.items[workerNewPos.y].items[workerNewPos.x - 1];
+        return map.items[newPos.y].items[newPos.x];
     }
 }
 
-fn isWorkerPosValid(position: Pos) bool {
+fn isPosValid(position: Pos) bool {
     if (position.x <= 0) {
         return false;
     } else if (position.y <= 0) {
@@ -168,12 +204,13 @@ fn isWorkerPosValid(position: Pos) bool {
     return true;
 }
 
-fn getWorkerNewPos(act: ActType) Pos {
+fn getNewPos(oldPos: Pos, act: ActType) Pos {
     return switch (act) {
-        .left => .{ .x = workerPos.x - 1, .y = workerPos.y },
-        .right => .{ .x = workerPos.x + 1, .y = workerPos.y },
-        .up => .{ .x = workerPos.x, .y = workerPos.y - 1 },
-        .down => .{ .x = workerPos.x, .y = workerPos.y + 1 },
+        .left => .{ .x = oldPos.x - 1, .y = oldPos.y },
+        .right => .{ .x = oldPos.x + 1, .y = oldPos.y },
+        .up => .{ .x = oldPos.x, .y = oldPos.y - 1 },
+        .down => .{ .x = oldPos.x, .y = oldPos.y + 1 },
+        .none => oldPos,
     };
 }
 
@@ -195,7 +232,7 @@ pub fn buildMap(givenMap: []u8) !std.ArrayList(std.ArrayList(TexType)) {
         }
 
         if (itemEnumed == TexType.worker or itemEnumed == TexType.workerDocked) {
-            workerPos.x = line.items.len;
+            workerPos.x = line.items.len - 1;
             workerPos.y = result.items.len;
         }
     }
