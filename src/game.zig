@@ -4,6 +4,8 @@ const raylib = @import("./raylib/raylib.zig");
 
 const ZecsiAllocator = @import("allocator.zig").ZecsiAllocator;
 var zalloc = ZecsiAllocator{};
+//var zalloc = std.heap.GeneralPurposeAllocator(.{}){};
+var alloc = zalloc.allocator();
 
 const texWidth: i32 = 32;
 const texHeight: i32 = 32;
@@ -24,8 +26,6 @@ const TexType = enum(u8) {
 const ActType = enum(u5) { up, down, left, right, none };
 const Pos = struct { x: usize, y: usize };
 
-var alloc = zalloc.allocator();
-
 var screenWidth: i32 = undefined;
 var screenHeight: i32 = undefined;
 var texFloor: raylib.Texture2D = undefined;
@@ -43,13 +43,14 @@ var mapSizeHeight: i32 = undefined;
 var workerPos: Pos = undefined;
 var workerMovedToTex: TexType = TexType.floor;
 
+pub var won: bool = false;
+
 pub fn start(givenMap: []u8) !void {
     map = try buildMap(givenMap);
 
     screenWidth = (mapSizeWidth * texWidth) + 2 * mapBorder;
     screenHeight = (mapSizeHeight * texHeight) + 2 * mapBorder;
 
-    raylib.SetConfigFlags(.FLAG_MSAA_4X_HINT);
     raylib.InitWindow(screenWidth, screenHeight, "sokoban");
     raylib.SetTargetFPS(21);
 
@@ -63,6 +64,15 @@ pub fn start(givenMap: []u8) !void {
 }
 
 pub fn stop() void {
+    for (map.items) |row| {
+        row.deinit();
+    }
+    map.deinit();
+
+    if (zalloc.deinit()) {
+        log.err("memory leaks detected!", .{});
+    }
+
     raylib.UnloadTexture(texFloor);
     raylib.UnloadTexture(texWall);
     raylib.UnloadTexture(texDock);
@@ -72,16 +82,15 @@ pub fn stop() void {
     raylib.UnloadTexture(texWorkerDocked);
 
     raylib.CloseWindow();
-    if (zalloc.deinit()) {
-        log.err("memory leaks detected!", .{});
-    }
 }
 
 pub fn loop(dt: f32) void {
     _ = dt;
 
     // Update
-    {
+    if (!won) {
+        won = checkWin();
+
         var moveResult: bool = true;
         if (raylib.IsKeyPressed(.KEY_D) or raylib.IsKeyPressed(.KEY_RIGHT)) {
             moveResult = move(ActType.right);
@@ -98,6 +107,8 @@ pub fn loop(dt: f32) void {
         if (!moveResult) {
             log.warn("Can't move there!", .{});
         }
+    } else {
+        log.info("PUZZLE SOLVED!", .{});
     }
 
     //Draw
@@ -135,7 +146,16 @@ pub fn loop(dt: f32) void {
     }
 }
 
-pub fn move(act: ActType) bool {
+fn checkWin() bool {
+    for (map.items) |row| {
+        for (row.items) |texType| {
+            if (texType == TexType.dock) return false;
+        }
+    }
+    return true;
+}
+
+fn move(act: ActType) bool {
     if (act == ActType.none) return true;
 
     const destTex: TexType = getTexDirection(workerPos, act);
@@ -217,6 +237,7 @@ fn getNewPos(oldPos: Pos, act: ActType) Pos {
 pub fn buildMap(givenMap: []u8) !std.ArrayList(std.ArrayList(TexType)) {
     var result = std.ArrayList(std.ArrayList(TexType)).init(alloc);
     var line = std.ArrayList(TexType).init(alloc);
+    defer line.deinit();
 
     for (givenMap) |item| {
         const itemEnumed = @intToEnum(TexType, item);

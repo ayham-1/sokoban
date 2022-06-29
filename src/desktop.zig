@@ -23,7 +23,7 @@ pub fn main() anyerror!void {
     try game.start(gameMap);
     defer game.stop();
 
-    while (!raylib.WindowShouldClose()) {
+    while (!raylib.WindowShouldClose() and !game.won) {
         game.loop(raylib.GetFrameTime());
     }
 }
