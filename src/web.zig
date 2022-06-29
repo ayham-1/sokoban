@@ -10,6 +10,9 @@ const game = @import("game.zig");
 const ZecsiAllocator = @import("allocator.zig").ZecsiAllocator;
 const ray = @import("raylib/raylib.zig");
 
+var zalloc = ZecsiAllocator{};
+var alloc = zalloc.allocator();
+
 ////special entry point for Emscripten build, called from src/marshall/emscripten_entry.c
 export fn emsc_main() callconv(.C) c_int {
     return safeMain() catch |err| {
@@ -23,7 +26,17 @@ export fn emsc_set_window_size(width: c_int, height: c_int) callconv(.C) void {
 }
 
 fn safeMain() !c_int {
-    game.start();
+    var testMap =
+        \\#www#www#
+        \\w...w...w
+        \\w.p.b.d.w
+        \\wwwwwwwww
+        \\
+    ;
+
+    var gameMap = try alloc.alloc(u8, testMap.len);
+    std.mem.copy(u8, gameMap, testMap);
+    try game.start(gameMap);
     defer game.stop();
 
     emsdk.emscripten_set_main_loop(gameLoop, 0, 1);
