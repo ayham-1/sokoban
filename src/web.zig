@@ -45,6 +45,6 @@ fn safeMain() !c_int {
 }
 
 export fn gameLoop() callconv(.C) void {
-    if (game.won) emsdk.emscripten_cancel_main_loop();
+    if (game.won) emsdk.emscripten_exit_with_live_runtime();
     game.loop(ray.GetFrameTime());
 }

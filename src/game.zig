@@ -107,8 +107,6 @@ pub fn loop(dt: f32) void {
         if (!moveResult) {
             log.warn("Can't move there!", .{});
         }
-    } else {
-        log.info("PUZZLE SOLVED!", .{});
     }
 
     //Draw
@@ -142,6 +140,20 @@ pub fn loop(dt: f32) void {
 
                 raylib.DrawTexture(texPtr.*, x, y, raylib.WHITE);
             }
+        }
+        if (won) {
+            log.info("PUZZLE SOLVED!", .{});
+
+            raylib.BeginDrawing();
+            defer raylib.EndDrawing();
+
+            var textSize = raylib.MeasureTextEx(raylib.GetFontDefault(), "PUZZLE SOLVED!", 23, 2.0);
+            var textWidth: i32 = @divFloor(textSize.int().x, 2);
+            var textHeight: i32 = @divFloor(textSize.int().y, 2);
+            var textLocationX: i32 = @divFloor(screenWidth, 2) - textWidth;
+            var textLocationY: i32 = @divFloor(screenHeight, 2) - textHeight;
+
+            raylib.DrawText("PUZZLE SOLVED!", textLocationX, textLocationY, 23, raylib.WHITE);
         }
     }
 }
