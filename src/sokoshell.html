@@ -18,17 +18,23 @@ div.extraSettings {
 <div class="emscripten">
 	<progress value="0" max="100" id="progress" hidden=1></progress>  
 </div>
+<div id="winStatus" style="display:none">
+	<center>
+		<h3>You Won!</h3>
+		<h4>Refresh in order to play another puzzle!</h3>
+	</center>
+</div>
 <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
 <br/>
 <center>
 	<button type=button onclick="toggleExtraSettings()">More Settings</button>
 </center>
 <div class="extraSettings" id="extraSettings" style="display: none;">
-	<hr/>
+	<hr>
 	<div class="grid">
 		<div class="grid-item" style="grid-column: 1 / span 2;grid-row: 1 / span 1">
 			<center>
-				<h3>Current Puzzle</h3>
+				<h3>Current Layout</h3>
 				<textarea class="mapView" id="mapView" rows="8"></textarea>
 			</center>
 		</div>
@@ -39,7 +45,7 @@ div.extraSettings {
 			</center>
 		</div>
 	</div>
-	<hr/>
+	<hr>
 </div>
 <script type='text/javascript'>
 	var statusElement = document.getElementById('status');

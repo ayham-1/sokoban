@@ -36,12 +36,14 @@ var texBoxDocked: raylib.Texture2D = undefined;
 var texWorker: raylib.Texture2D = undefined;
 var texWorkerDocked: raylib.Texture2D = undefined;
 
+pub var mapDisplayed: std.ArrayList(u8) = undefined;
 var map: std.ArrayList(std.ArrayList(TexType)) = undefined;
 var mapSizeWidth: i32 = undefined;
 var mapSizeHeight: i32 = undefined;
 
 var workerPos: Pos = undefined;
-var workerMovedToTex: TexType = TexType.floor;
+var workerMovedToTex: TexType = .floor;
+pub var workerMoved: bool = false;
 
 pub var won: bool = false;
 
@@ -68,6 +70,7 @@ pub fn stop() void {
         row.deinit();
     }
     map.deinit();
+    mapDisplayed.deinit();
 
     if (zalloc.deinit()) {
         log.err("memory leaks detected!", .{});
@@ -161,63 +164,68 @@ pub fn loop(dt: f32) void {
 fn checkWin() bool {
     for (map.items) |row| {
         for (row.items) |texType| {
-            if (texType == TexType.dock) return false;
+            if (texType == .dock) return false;
         }
     }
     return true;
 }
 
 fn move(act: ActType) bool {
-    if (act == ActType.none) return true;
+    if (act == ActType.none) {
+        workerMoved = false;
+        return true;
+    }
 
     const destTex: TexType = getTexDirection(workerPos, act);
     const workerNewPos: Pos = getNewPos(workerPos, act);
 
     if (destTex == TexType.floor) {
-        map.items[workerNewPos.y].items[workerNewPos.x] = TexType.worker;
+        map.items[workerNewPos.y].items[workerNewPos.x] = .worker;
         map.items[workerPos.y].items[workerPos.x] = workerMovedToTex;
-        workerMovedToTex = TexType.floor;
+        workerMovedToTex = .floor;
         workerPos = workerNewPos;
-    } else if (destTex == TexType.box or destTex == TexType.boxDocked) {
+    } else if (destTex == .box or destTex == .boxDocked) {
         const boxDestTex: TexType = getTexDirection(workerNewPos, act);
         const boxNewPos: Pos = getNewPos(workerNewPos, act);
 
         map.items[boxNewPos.y].items[boxNewPos.x] = switch (boxDestTex) {
-            .floor => TexType.box,
-            .dock => TexType.boxDocked,
+            .floor => .box,
+            .dock => .boxDocked,
             else => {
                 return false;
             },
         };
 
         map.items[workerNewPos.y].items[workerNewPos.x] = switch (destTex) {
-            .box => TexType.worker,
-            .boxDocked => TexType.workerDocked,
+            .box => .worker,
+            .boxDocked => .workerDocked,
             else => unreachable,
         };
         map.items[workerPos.y].items[workerPos.x] = workerMovedToTex;
 
         workerMovedToTex = switch (destTex) {
-            .box => TexType.floor,
-            .boxDocked => TexType.dock,
+            .box => .floor,
+            .boxDocked => .dock,
             else => unreachable,
         };
         workerPos = workerNewPos;
-    } else if (destTex == TexType.dock) {
-        map.items[workerNewPos.y].items[workerNewPos.x] = TexType.workerDocked;
-        map.items[workerPos.y].items[workerPos.x] = TexType.floor;
-        workerMovedToTex = TexType.dock;
+    } else if (destTex == .dock) {
+        map.items[workerNewPos.y].items[workerNewPos.x] = .workerDocked;
+        map.items[workerPos.y].items[workerPos.x] = .floor;
+        workerMovedToTex = .dock;
         workerPos = workerNewPos;
     } else {
+        workerMoved = false;
         return false;
     }
+    workerMoved = true;
     return true;
 }
 
 fn getTexDirection(pos: Pos, act: ActType) TexType {
     const newPos: Pos = getNewPos(pos, act);
     if (!isPosValid(newPos)) {
-        return TexType.none;
+        return .none;
     } else {
         return map.items[newPos.y].items[newPos.x];
     }
@@ -246,7 +254,25 @@ fn getNewPos(oldPos: Pos, act: ActType) Pos {
     };
 }
 
-pub fn buildMap(givenMap: []u8) !std.ArrayList(std.ArrayList(TexType)) {
+pub fn buildDisplayedMap() !void {
+    mapDisplayed.deinit();
+    var result = std.ArrayList(u8).init(alloc);
+
+    for (map.items) |row| {
+        for (row.items) |item| {
+            try result.append(@enumToInt(item));
+        }
+        const builtin = @import("builtin");
+        if (builtin.os.tag == .wasi) {
+            try result.appendSlice("<br>");
+        } else {
+            try result.append('\n');
+        }
+    }
+    mapDisplayed = result;
+}
+
+fn buildMap(givenMap: []u8) !std.ArrayList(std.ArrayList(TexType)) {
     var result = std.ArrayList(std.ArrayList(TexType)).init(alloc);
     var line = std.ArrayList(TexType).init(alloc);
     defer line.deinit();
@@ -264,7 +290,7 @@ pub fn buildMap(givenMap: []u8) !std.ArrayList(std.ArrayList(TexType)) {
             try line.append(itemEnumed);
         }
 
-        if (itemEnumed == TexType.worker or itemEnumed == TexType.workerDocked) {
+        if (itemEnumed == .worker or itemEnumed == .workerDocked) {
             workerPos.x = line.items.len - 1;
             workerPos.y = result.items.len;
         }
