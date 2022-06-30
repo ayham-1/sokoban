@@ -1,6 +1,6 @@
 <title>sokoban</title>
 <style>
-.emscripten { padding-right: 0; margin-left: auto; margin-right: auto; display: block; }
+/*.emscripten { padding-right: 0; margin-left: auto; margin-right: auto; display: block; }*/
 textarea.emscripten { font-family: monospace; width: 80%; }
 div.emscripten { text-align: center; }
 /* the canvas *must not* have any border or padding, or mouse coords will be wrong */
@@ -8,6 +8,12 @@ canvas.emscripten { border: 0px none; }
 div.grid {
 	display: grid;
 	justify-content: space-around;
+	align-items: center;
+}
+@media (min-width: 900px) {
+  div.grid {
+	grid-template-columns: repeat(2, 1fr);
+  }
 }
 div.extraSettings {
 	display: none;
@@ -24,27 +30,30 @@ div.extraSettings {
 		<h4>Refresh in order to play another puzzle!</h3>
 	</center>
 </div>
-<canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
-<br/>
+<div class="grid">
+	<div class="grid-item">
+		<center>
+			<h3>Game</h3>
+			<canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+		</center>
+	</div>
+	<div class="grid-item">
+		<center>
+			<h3>Current Layout</h3>
+			<textarea class="mapView" id="mapView" rows="8"></textarea>
+		</center>
+	</div>
+</div>
+<br>
 <center>
 	<button type=button onclick="toggleExtraSettings()">More Settings</button>
 </center>
 <div class="extraSettings" id="extraSettings" style="display: none;">
 	<hr>
-	<div class="grid">
-		<div class="grid-item" style="grid-column: 1 / span 2;grid-row: 1 / span 1">
-			<center>
-				<h3>Current Layout</h3>
-				<textarea class="mapView" id="mapView" rows="8"></textarea>
-			</center>
-		</div>
-		<div class="grid-item" style="grid-column: 2 / span 2;grid-row: 1 / span 1">
-			<center>
-				<h3>Under The Hood</h3>
-				<textarea class="emscripten" id="output" rows="8"></textarea>
-			</center>
-		</div>
-	</div>
+	<center>
+		<h3>Under The Hood</h3>
+		<textarea class="emscripten" id="output" rows="8"></textarea>
+	</center>
 	<hr>
 </div>
 <script type='text/javascript'>

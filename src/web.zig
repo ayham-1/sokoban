@@ -50,14 +50,11 @@ fn safeMain() !c_int {
 export fn gameLoop() callconv(.C) void {
     if (game.won) {
         emsdk.emscripten_run_script(winPromptScript);
-        emsdk.emscripten_cancel_main_loop();
-        game.stop();
     }
 
     game.loop(ray.GetFrameTime());
 
     if (game.workerMoved) {
-        log.warn("ran", .{});
         updateMapView();
     }
 }
@@ -75,7 +72,6 @@ fn updateMapView() void {
     gameMapScript.append('\'') catch unreachable;
     gameMapScript.appendSlice(".replace(/<br>/gi, \"\\r\\n\");") catch unreachable;
     gameMapScript.append('\x00') catch unreachable;
-    log.warn("{s}", .{gameMapScript.items});
     emsdk.emscripten_run_script(gameMapScript.items.ptr);
 }
 
