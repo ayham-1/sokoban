@@ -54,7 +54,11 @@ pub fn start(givenMap: []u8) !void {
     screenHeight = (mapSizeHeight * texHeight) + 2 * mapBorder;
 
     raylib.InitWindow(screenWidth, screenHeight, "sokoban");
-    raylib.SetTargetFPS(21);
+
+    const builtin = @import("builtin");
+    if (builtin.os.tag != .wasi) {
+        raylib.SetTargetFPS(21);
+    }
 
     texFloor = raylib.LoadTexture("assets/floor.png");
     texWall = raylib.LoadTexture("assets/wall.png");
@@ -116,7 +120,6 @@ pub fn loop(dt: f32) void {
     {
         raylib.BeginDrawing();
         defer raylib.EndDrawing();
-
         raylib.ClearBackground(raylib.BLACK);
 
         for (map.items) |row, i| {

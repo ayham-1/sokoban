@@ -43,13 +43,14 @@ fn safeMain() !c_int {
     updateMapView();
 
     emsdk.emscripten_set_main_loop(gameLoop, 0, 1);
+
     return 0;
 }
 
 export fn gameLoop() callconv(.C) void {
     if (game.won) {
         emsdk.emscripten_run_script(winPromptScript);
-        emsdk.emscripten_exit_with_live_runtime();
+        emsdk.emscripten_cancel_main_loop();
         game.stop();
     }
 
@@ -64,7 +65,7 @@ export fn gameLoop() callconv(.C) void {
 fn updateMapView() void {
     game.buildDisplayedMap() catch {
         emsdk.emscripten_run_script(invalidMapScript);
-        emsdk.emscripten_exit_with_live_runtime();
+        emsdk.emscripten_cancel_main_loop();
         return;
     };
 
