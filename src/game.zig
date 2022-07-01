@@ -11,7 +11,9 @@ const texWidth: i32 = 32;
 const texHeight: i32 = 32;
 const mapBorder: i32 = 6;
 
-const TexType = enum(u8) {
+pub const MapError = error{MapError};
+
+pub const TexType = enum(u8) {
     floor = '.',
     wall = 'w',
     dock = 'd',
@@ -21,6 +23,23 @@ const TexType = enum(u8) {
     workerDocked = 'X',
     none = '#',
     next = '\n',
+
+    // solves the problem of @intToEnum() having undefined behavior.
+    // TODO: maybe better syntax?
+    pub fn convert(number: u8) MapError!TexType {
+        return switch (number) {
+            @enumToInt(TexType.floor) => .floor,
+            @enumToInt(TexType.wall) => .wall,
+            @enumToInt(TexType.dock) => .dock,
+            @enumToInt(TexType.box) => .box,
+            @enumToInt(TexType.boxDocked) => .boxDocked,
+            @enumToInt(TexType.worker) => .worker,
+            @enumToInt(TexType.workerDocked) => .workerDocked,
+            @enumToInt(TexType.none) => .none,
+            @enumToInt(TexType.next) => .next,
+            else => error.MapError,
+        };
+    }
 };
 
 const ActType = enum(u5) { up, down, left, right, none };
@@ -44,6 +63,7 @@ var mapSizeHeight: i32 = undefined;
 var workerPos: Pos = undefined;
 var workerMovedToTex: TexType = .floor;
 pub var workerMoved: bool = false;
+pub var workerInputStopped: bool = false;
 
 pub var won: bool = false;
 
@@ -93,19 +113,20 @@ pub fn stop() void {
 
 pub fn loop(dt: f32) void {
     _ = dt;
+    if (won) return;
 
     // Update
-    if (!won) {
+    if (!workerInputStopped and map.items.len != 0) {
         won = checkWin();
 
         var moveResult: bool = true;
-        if (raylib.IsKeyPressed(.KEY_D) or raylib.IsKeyPressed(.KEY_RIGHT)) {
+        if (raylib.IsKeyPressed(.KEY_D)) {
             moveResult = move(ActType.right);
-        } else if (raylib.IsKeyPressed(.KEY_A) or raylib.IsKeyPressed(.KEY_LEFT)) {
+        } else if (raylib.IsKeyPressed(.KEY_A)) {
             moveResult = move(ActType.left);
-        } else if (raylib.IsKeyPressed(.KEY_W) or raylib.IsKeyPressed(.KEY_UP)) {
+        } else if (raylib.IsKeyPressed(.KEY_W)) {
             moveResult = move(ActType.up);
-        } else if (raylib.IsKeyPressed(.KEY_S) or raylib.IsKeyPressed(.KEY_DOWN)) {
+        } else if (raylib.IsKeyPressed(.KEY_S)) {
             moveResult = move(ActType.down);
         } else {
             moveResult = move(ActType.none);
@@ -121,6 +142,10 @@ pub fn loop(dt: f32) void {
         raylib.BeginDrawing();
         defer raylib.EndDrawing();
         raylib.ClearBackground(raylib.BLACK);
+
+        if (map.items.len == 0) {
+            drawTextCenter("EMPTY PUZZLE", raylib.RED);
+        }
 
         for (map.items) |row, i| {
             columned: for (row.items) |texType, j| {
@@ -149,25 +174,17 @@ pub fn loop(dt: f32) void {
         }
         if (won) {
             log.info("PUZZLE SOLVED!", .{});
-
-            raylib.BeginDrawing();
-            defer raylib.EndDrawing();
-
-            var textSize = raylib.MeasureTextEx(raylib.GetFontDefault(), "PUZZLE SOLVED!", 23, 2.0);
-            var textWidth: i32 = @divFloor(textSize.int().x, 2);
-            var textHeight: i32 = @divFloor(textSize.int().y, 2);
-            var textLocationX: i32 = @divFloor(screenWidth, 2) - textWidth;
-            var textLocationY: i32 = @divFloor(screenHeight, 2) - textHeight;
-
-            raylib.DrawText("PUZZLE SOLVED!", textLocationX, textLocationY, 23, raylib.WHITE);
+            drawTextCenter("PUZZLE SOLVED!", raylib.WHITE);
         }
     }
 }
 
 fn checkWin() bool {
+    if (map.items.len == 0) return false;
     for (map.items) |row| {
         for (row.items) |texType| {
             if (texType == .dock) return false;
+            if (texType == .workerDocked) return false;
         }
     }
     return true;
@@ -194,22 +211,20 @@ fn move(act: ActType) bool {
         map.items[boxNewPos.y].items[boxNewPos.x] = switch (boxDestTex) {
             .floor => .box,
             .dock => .boxDocked,
-            else => {
-                return false;
-            },
+            else => return false,
         };
 
         map.items[workerNewPos.y].items[workerNewPos.x] = switch (destTex) {
             .box => .worker,
             .boxDocked => .workerDocked,
-            else => unreachable,
+            else => return false,
         };
         map.items[workerPos.y].items[workerPos.x] = workerMovedToTex;
 
         workerMovedToTex = switch (destTex) {
             .box => .floor,
             .boxDocked => .dock,
-            else => unreachable,
+            else => return false,
         };
         workerPos = workerNewPos;
     } else if (destTex == .dock) {
@@ -280,8 +295,10 @@ fn buildMap(givenMap: []u8) !std.ArrayList(std.ArrayList(TexType)) {
     var line = std.ArrayList(TexType).init(alloc);
     defer line.deinit();
 
+    if (givenMap.len == 0) return result;
+
     for (givenMap) |item| {
-        const itemEnumed = @intToEnum(TexType, item);
+        const itemEnumed = try TexType.convert(item);
         if (itemEnumed == TexType.next) {
             var added_line = std.ArrayList(TexType).init(alloc);
             try added_line.appendSlice(line.items);
@@ -302,4 +319,21 @@ fn buildMap(givenMap: []u8) !std.ArrayList(std.ArrayList(TexType)) {
     mapSizeWidth = @intCast(i32, result.items[0].items.len);
     mapSizeHeight = @intCast(i32, result.items.len);
     return result;
+}
+
+fn drawTextCenter(str: [*:0]const u8, color: raylib.Color) void {
+    raylib.BeginDrawing();
+    defer raylib.EndDrawing();
+
+    var textSize = raylib.MeasureTextEx(raylib.GetFontDefault(), str, 23, 2.0);
+    var textWidth: i32 = @divFloor(textSize.int().x, 2);
+    var textHeight: i32 = @divFloor(textSize.int().y, 2);
+    var textLocationX: i32 = @divFloor(screenWidth, 2) - textWidth;
+    var textLocationY: i32 = @divFloor(screenHeight, 2) - textHeight;
+
+    raylib.DrawText(str, textLocationX, textLocationY, 23, color);
+}
+
+pub fn updateMap(givenMap: []u8) !void {
+    map = try buildMap(givenMap);
 }

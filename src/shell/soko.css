@@ -1,0 +1,21 @@
+/*.emscripten { padding-right: 0; margin-left: auto; margin-right: auto; display: block; }*/
+textarea { 
+	font-family: monospace; 
+	textTransform: "initial";
+}
+div.emscripten { text-align: center; }
+/* the canvas *must not* have any border or padding, or mouse coords will be wrong */
+canvas.emscripten { border: 0px none; }
+div.grid {
+	display: grid;
+	justify-content: space-around;
+	align-items: center;
+}
+@media (min-width: 900px) {
+	div.grid {
+		grid-template-columns: repeat(2, 1fr);
+	}
+}
+div.extraSettings {
+	display: none;
+}

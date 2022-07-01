@@ -4,7 +4,9 @@ const fs = std.fs;
 pub const APP_NAME = "sokoban";
 const raylibSrc = "src/raylib/raylib/src/";
 const bindingSrc = "src/raylib/";
-const emscriptenShell = "src/sokoshell.html";
+const emscriptenShell = "src/shell/soko.html";
+const emscriptenShellJS = "src/shell/soko.js";
+const emscriptenShellCSS = "src/shell/soko.css";
 
 pub fn build(b: *std.build.Builder) !void {
     const target = b.standardTargetOptions(.{});
@@ -13,8 +15,8 @@ pub fn build(b: *std.build.Builder) !void {
     switch (target.getOsTag()) {
         .wasi, .emscripten => {
             const emscriptenSrc = "src/raylib/emscripten/";
-            const webCachedir = "zig-cache/web/";
-            const webOutdir = "zig-out/web/";
+            const webChacheDir = "zig-cache/web/";
+            const webOutDir = "zig-out/web/";
 
             std.log.info("building for emscripten\n", .{});
             if (b.sysroot == null) {
@@ -47,33 +49,33 @@ pub fn build(b: *std.build.Builder) !void {
             const include_path = try fs.path.join(b.allocator, &.{ b.sysroot.?, "cache", "sysroot", "include" });
             defer b.allocator.free(include_path);
 
-            fs.cwd().makePath(webCachedir) catch {};
-            fs.cwd().makePath(webOutdir) catch {};
+            fs.cwd().makePath(webChacheDir) catch {};
+            fs.cwd().makePath(webOutDir) catch {};
 
             const warnings = ""; //-Wall
 
-            const rcoreO = b.addSystemCommand(&.{ emcc_path, "-Os", warnings, "-c", raylibSrc ++ "rcore.c", "-o", webCachedir ++ "rcore.o", "-Os", warnings, "-DPLATFORM_WEB", "-DGRAPHICS_API_OPENGL_ES2" });
-            const rshapesO = b.addSystemCommand(&.{ emcc_path, "-Os", warnings, "-c", raylibSrc ++ "rshapes.c", "-o", webCachedir ++ "rshapes.o", "-Os", warnings, "-DPLATFORM_WEB", "-DGRAPHICS_API_OPENGL_ES2" });
-            const rtexturesO = b.addSystemCommand(&.{ emcc_path, "-Os", warnings, "-c", raylibSrc ++ "rtextures.c", "-o", webCachedir ++ "rtextures.o", "-Os", warnings, "-DPLATFORM_WEB", "-DGRAPHICS_API_OPENGL_ES2" });
-            const rtextO = b.addSystemCommand(&.{ emcc_path, "-Os", warnings, "-c", raylibSrc ++ "rtext.c", "-o", webCachedir ++ "rtext.o", "-Os", warnings, "-DPLATFORM_WEB", "-DGRAPHICS_API_OPENGL_ES2" });
-            const rmodelsO = b.addSystemCommand(&.{ emcc_path, "-Os", warnings, "-c", raylibSrc ++ "rmodels.c", "-o", webCachedir ++ "rmodels.o", "-Os", warnings, "-DPLATFORM_WEB", "-DGRAPHICS_API_OPENGL_ES2" });
-            const utilsO = b.addSystemCommand(&.{ emcc_path, "-Os", warnings, "-c", raylibSrc ++ "utils.c", "-o", webCachedir ++ "utils.o", "-Os", warnings, "-DPLATFORM_WEB" });
-            const raudioO = b.addSystemCommand(&.{ emcc_path, "-Os", warnings, "-c", raylibSrc ++ "raudio.c", "-o", webCachedir ++ "raudio.o", "-Os", warnings, "-DPLATFORM_WEB" });
+            const rcoreO = b.addSystemCommand(&.{ emcc_path, "-Os", warnings, "-c", raylibSrc ++ "rcore.c", "-o", webChacheDir ++ "rcore.o", "-Os", warnings, "-DPLATFORM_WEB", "-DGRAPHICS_API_OPENGL_ES2" });
+            const rshapesO = b.addSystemCommand(&.{ emcc_path, "-Os", warnings, "-c", raylibSrc ++ "rshapes.c", "-o", webChacheDir ++ "rshapes.o", "-Os", warnings, "-DPLATFORM_WEB", "-DGRAPHICS_API_OPENGL_ES2" });
+            const rtexturesO = b.addSystemCommand(&.{ emcc_path, "-Os", warnings, "-c", raylibSrc ++ "rtextures.c", "-o", webChacheDir ++ "rtextures.o", "-Os", warnings, "-DPLATFORM_WEB", "-DGRAPHICS_API_OPENGL_ES2" });
+            const rtextO = b.addSystemCommand(&.{ emcc_path, "-Os", warnings, "-c", raylibSrc ++ "rtext.c", "-o", webChacheDir ++ "rtext.o", "-Os", warnings, "-DPLATFORM_WEB", "-DGRAPHICS_API_OPENGL_ES2" });
+            const rmodelsO = b.addSystemCommand(&.{ emcc_path, "-Os", warnings, "-c", raylibSrc ++ "rmodels.c", "-o", webChacheDir ++ "rmodels.o", "-Os", warnings, "-DPLATFORM_WEB", "-DGRAPHICS_API_OPENGL_ES2" });
+            const utilsO = b.addSystemCommand(&.{ emcc_path, "-Os", warnings, "-c", raylibSrc ++ "utils.c", "-o", webChacheDir ++ "utils.o", "-Os", warnings, "-DPLATFORM_WEB" });
+            const raudioO = b.addSystemCommand(&.{ emcc_path, "-Os", warnings, "-c", raylibSrc ++ "raudio.c", "-o", webChacheDir ++ "raudio.o", "-Os", warnings, "-DPLATFORM_WEB" });
             const libraylibA = b.addSystemCommand(&.{
                 emar_path,
                 "rcs",
-                webCachedir ++ "libraylib.a",
-                webCachedir ++ "rcore.o",
-                webCachedir ++ "rshapes.o",
-                webCachedir ++ "rtextures.o",
-                webCachedir ++ "rtext.o",
-                webCachedir ++ "rmodels.o",
-                webCachedir ++ "utils.o",
-                webCachedir ++ "raudio.o",
+                webChacheDir ++ "libraylib.a",
+                webChacheDir ++ "rcore.o",
+                webChacheDir ++ "rshapes.o",
+                webChacheDir ++ "rtextures.o",
+                webChacheDir ++ "rtext.o",
+                webChacheDir ++ "rmodels.o",
+                webChacheDir ++ "utils.o",
+                webChacheDir ++ "raudio.o",
             });
             const emranlib = b.addSystemCommand(&.{
                 emranlib_path,
-                webCachedir ++ "libraylib.a",
+                webChacheDir ++ "libraylib.a",
             });
 
             libraylibA.step.dependOn(&rcoreO.step);
@@ -86,7 +88,7 @@ pub fn build(b: *std.build.Builder) !void {
             emranlib.step.dependOn(&libraylibA.step);
 
             //only build raylib if not already there
-            _ = fs.cwd().statFile(webCachedir ++ "libraylib.a") catch {
+            _ = fs.cwd().statFile(webChacheDir ++ "libraylib.a") catch {
                 lib.step.dependOn(&emranlib.step);
             };
 
@@ -101,7 +103,7 @@ pub fn build(b: *std.build.Builder) !void {
             lib.addIncludeDir(raylibSrc);
             lib.addIncludeDir(raylibSrc ++ "extras/");
 
-            lib.setOutputDir(webCachedir);
+            lib.setOutputDir(webChacheDir);
             lib.install();
 
             const shell = switch (mode) {
@@ -112,18 +114,18 @@ pub fn build(b: *std.build.Builder) !void {
             const emcc = b.addSystemCommand(&.{
                 emcc_path,
                 "-o",
-                webOutdir ++ "game.html",
+                webOutDir ++ "game.html",
 
                 emscriptenSrc ++ "entry.c",
                 bindingSrc ++ "marshal.c",
 
-                webCachedir ++ "lib" ++ APP_NAME ++ ".a",
+                webChacheDir ++ "lib" ++ APP_NAME ++ ".a",
                 "-I.",
                 "-I" ++ raylibSrc,
                 "-I" ++ emscriptenSrc,
                 "-I" ++ bindingSrc,
                 "-L.",
-                "-L" ++ webCachedir,
+                "-L" ++ webChacheDir,
                 "-lraylib",
                 "-l" ++ APP_NAME,
                 "--shell-file",
@@ -151,16 +153,22 @@ pub fn build(b: *std.build.Builder) !void {
                 // "-sTOTAL_STACK=128MB",
                 // "-sMALLOC='emmalloc'",
                 // "--no-entry",
-                "-sEXPORTED_FUNCTIONS=['_malloc','_free','_main', '_emsc_main','_emsc_set_window_size']",
+                "-sEXPORTED_FUNCTIONS=['_malloc','_free','_main', '_emsc_main','_emsc_set_window_size','_updateMap', '_toggleInput']",
                 "-sEXPORTED_RUNTIME_METHODS=ccall,cwrap",
             });
 
             emcc.step.dependOn(&lib.step);
 
+            //b.installFile("src/sokoshell.js", "sokoshell.js");
             b.getInstallStep().dependOn(&emcc.step);
+            b.installFile(emscriptenShellJS, "web/sokoshell.js");
+            b.installFile(emscriptenShellCSS, "web/sokoshell.css");
+
+            //try fs.cwd().copyFile(emscriptenShell, webOutDir ++ "sokoshell.js", .{});
+
             //-------------------------------------------------------------------------------------
 
-            std.log.info("\n\nOutput files will be in {s}\n---\ncd {s}\npython -m http.server\n---\n\nbuilding...", .{ webOutdir, webOutdir });
+            std.log.info("\n\nOutput files will be in {s}\n---\ncd {s}\npython -m http.server\n---\n\nbuilding...", .{ webOutDir, webOutDir });
         },
         else => {
             std.log.info("building for desktop\n", .{});

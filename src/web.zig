@@ -48,9 +48,7 @@ fn safeMain() !c_int {
 }
 
 export fn gameLoop() callconv(.C) void {
-    if (game.won) {
-        emsdk.emscripten_run_script(winPromptScript);
-    }
+    if (game.won) emsdk.emscripten_run_script(winPromptScript);
 
     game.loop(ray.GetFrameTime());
 
@@ -62,7 +60,7 @@ export fn gameLoop() callconv(.C) void {
 fn updateMapView() void {
     game.buildDisplayedMap() catch {
         emsdk.emscripten_run_script(invalidMapScript);
-        emsdk.emscripten_cancel_main_loop();
+        //emsdk.emscripten_cancel_main_loop();
         return;
     };
 
@@ -75,14 +73,36 @@ fn updateMapView() void {
     emsdk.emscripten_run_script(gameMapScript.items.ptr);
 }
 
+export fn updateMap() void {
+    var givenMap = emsdk.emscripten_run_script_string(getMapView);
+    var givenMapSize = @intCast(usize, emsdk.emscripten_run_script_int(getMapViewSize));
+
+    game.updateMap(givenMap[0..givenMapSize]) catch {
+        emsdk.emscripten_run_script(invalidMapScript);
+        updateMapView();
+    };
+}
+
+export fn toggleInput() void {
+    game.workerInputStopped = !game.workerInputStopped;
+}
+
 const winPromptScript =
     \\document.getElementById("winStatus").style.display = "block";
 ;
 
 const invalidMapScript =
-    \\alert("It appears you don't have a valid puzzle map!");
+    \\alert("Make sure you enter valid puzzle tiles!");
 ;
 
 const mapViewScript =
-    \\document.getElementById("mapView").innerHTML = '
+    \\document.getElementById("mapView").value = '
+;
+
+const getMapView =
+    \\document.getElementById("mapView").value.replace(/\r\n/gi, "\n");
+;
+
+const getMapViewSize =
+    \\document.getElementById("mapView").value.length;
 ;
