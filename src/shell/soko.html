@@ -20,8 +20,10 @@
 		<center>
 			<h3>Current Layout</h3>
 			<textarea class="mapView" rows=7 cols=25 id="mapView"
-													 oninput="changeMap()"
-													 onfocus="focusMap()" onfocusout="focusMap()">Map should be loaded here...</textarea>
+													 oninput="changeMap(this)"
+													 onfocus="focusMap()"
+													 onfocusout="focusMap()">
+				Map should be loaded here...</textarea>
 			<br>
 			<br>
 			Puzzle Width:
@@ -29,6 +31,10 @@
 			<br>
 			Puzzle Height:
 			5 <input type="range" min="5" max="15" value="7" class="slider" id="height"> 15
+			<br>
+			<br>
+			<button class="generate" id="generate" onclick="generatePuzzle()">
+				Generate New Puzzle</button>
 		</center>
 	</div>
 </div>

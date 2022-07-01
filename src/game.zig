@@ -4,8 +4,9 @@ const raylib = @import("./raylib/raylib.zig");
 
 const ZecsiAllocator = @import("allocator.zig").ZecsiAllocator;
 var zalloc = ZecsiAllocator{};
-//var zalloc = std.heap.GeneralPurposeAllocator(.{}){};
 var alloc = zalloc.allocator();
+
+const puzzle = @import("puzzle.zig");
 
 const texWidth: i32 = 32;
 const texHeight: i32 = 32;
@@ -174,7 +175,7 @@ pub fn loop(dt: f32) void {
         }
         if (won) {
             log.info("PUZZLE SOLVED!", .{});
-            drawTextCenter("PUZZLE SOLVED!", raylib.WHITE);
+            drawTextCenter("PUZZLE SOLVED!", raylib.YELLOW);
         }
     }
 }
@@ -316,8 +317,23 @@ fn buildMap(givenMap: []u8) !std.ArrayList(std.ArrayList(TexType)) {
         }
     }
 
-    mapSizeWidth = @intCast(i32, result.items[0].items.len);
     mapSizeHeight = @intCast(i32, result.items.len);
+    if (mapSizeHeight != 0) {
+        mapSizeWidth = 0;
+        for (result.items) |row| {
+            if (row.items.len > mapSizeWidth) mapSizeWidth = @intCast(i32, row.items.len);
+        }
+    } else {
+        mapSizeWidth = 6;
+        mapSizeHeight = 2;
+    }
+
+    // make sure window is sized properly
+    screenWidth = (mapSizeWidth * texWidth) + 2 * mapBorder;
+    screenHeight = (mapSizeHeight * texHeight) + 2 * mapBorder;
+
+    if (raylib.IsWindowReady()) raylib.SetWindowSize(screenWidth, screenHeight);
+
     return result;
 }
 

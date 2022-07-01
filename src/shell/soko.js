@@ -75,9 +75,11 @@ function toggleExtraSettings() {
 	}
 }
 
-function changeMap() {
+function changeMap(element) {
 	updateMap = Module.cwrap('updateMap', null, null);
 	updateMap();
+	element.style.height = "5px";
+	element.style.height = (element.scrollHeight)+"px";
 }
 
 function focusMap() {
