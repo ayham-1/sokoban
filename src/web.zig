@@ -39,6 +39,7 @@ fn safeMain() !c_int {
     std.mem.copy(u8, gameMap, testMap);
     try game.start(gameMap);
     defer game.stop();
+    defer alloc.free(gameMap);
 
     updateMapView();
 

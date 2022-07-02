@@ -1,50 +1,13 @@
 const std = @import("std");
 const log = @import("log.zig");
 const raylib = @import("./raylib/raylib.zig");
+const soko = @import("constants.zig");
 
 const ZecsiAllocator = @import("allocator.zig").ZecsiAllocator;
 var zalloc = ZecsiAllocator{};
 var alloc = zalloc.allocator();
 
 const puzzle = @import("puzzle.zig");
-
-const texWidth: i32 = 32;
-const texHeight: i32 = 32;
-const mapBorder: i32 = 6;
-
-pub const MapError = error{MapError};
-
-pub const TexType = enum(u8) {
-    floor = '.',
-    wall = 'w',
-    dock = 'd',
-    box = 'b',
-    boxDocked = 'x',
-    worker = 'p',
-    workerDocked = 'X',
-    none = '#',
-    next = '\n',
-
-    // solves the problem of @intToEnum() having undefined behavior.
-    // TODO: maybe better syntax?
-    pub fn convert(number: u8) MapError!TexType {
-        return switch (number) {
-            @enumToInt(TexType.floor) => .floor,
-            @enumToInt(TexType.wall) => .wall,
-            @enumToInt(TexType.dock) => .dock,
-            @enumToInt(TexType.box) => .box,
-            @enumToInt(TexType.boxDocked) => .boxDocked,
-            @enumToInt(TexType.worker) => .worker,
-            @enumToInt(TexType.workerDocked) => .workerDocked,
-            @enumToInt(TexType.none) => .none,
-            @enumToInt(TexType.next) => .next,
-            else => error.MapError,
-        };
-    }
-};
-
-const ActType = enum(u5) { up, down, left, right, none };
-const Pos = struct { x: usize, y: usize };
 
 var screenWidth: i32 = undefined;
 var screenHeight: i32 = undefined;
@@ -57,12 +20,12 @@ var texWorker: raylib.Texture2D = undefined;
 var texWorkerDocked: raylib.Texture2D = undefined;
 
 pub var mapDisplayed: std.ArrayList(u8) = undefined;
-var map: std.ArrayList(std.ArrayList(TexType)) = undefined;
+var map: std.ArrayList(std.ArrayList(soko.TexType)) = undefined;
 var mapSizeWidth: i32 = undefined;
 var mapSizeHeight: i32 = undefined;
 
-var workerPos: Pos = undefined;
-var workerMovedToTex: TexType = .floor;
+var workerPos: soko.Pos = undefined;
+var workerMovedToTex: soko.TexType = .floor;
 pub var workerMoved: bool = false;
 pub var workerInputStopped: bool = false;
 
@@ -71,8 +34,8 @@ pub var won: bool = false;
 pub fn start(givenMap: []u8) !void {
     map = try buildMap(givenMap);
 
-    screenWidth = (mapSizeWidth * texWidth) + 2 * mapBorder;
-    screenHeight = (mapSizeHeight * texHeight) + 2 * mapBorder;
+    screenWidth = (mapSizeWidth * soko.texWidth) + 2 * soko.mapBorder;
+    screenHeight = (mapSizeHeight * soko.texHeight) + 2 * soko.mapBorder;
 
     raylib.InitWindow(screenWidth, screenHeight, "sokoban");
 
@@ -122,15 +85,15 @@ pub fn loop(dt: f32) void {
 
         var moveResult: bool = true;
         if (raylib.IsKeyPressed(.KEY_D)) {
-            moveResult = move(ActType.right);
+            moveResult = move(soko.ActType.right);
         } else if (raylib.IsKeyPressed(.KEY_A)) {
-            moveResult = move(ActType.left);
+            moveResult = move(soko.ActType.left);
         } else if (raylib.IsKeyPressed(.KEY_W)) {
-            moveResult = move(ActType.up);
+            moveResult = move(soko.ActType.up);
         } else if (raylib.IsKeyPressed(.KEY_S)) {
-            moveResult = move(ActType.down);
+            moveResult = move(soko.ActType.down);
         } else {
-            moveResult = move(ActType.none);
+            moveResult = move(soko.ActType.none);
         }
 
         if (!moveResult) {
@@ -151,8 +114,8 @@ pub fn loop(dt: f32) void {
         for (map.items) |row, i| {
             columned: for (row.items) |texType, j| {
                 // find coords value of current box
-                var x: i32 = mapBorder + @intCast(i32, j) * texWidth;
-                var y: i32 = mapBorder + @intCast(i32, i) * texHeight;
+                var x: i32 = soko.mapBorder + @intCast(i32, j) * soko.texWidth;
+                var y: i32 = soko.mapBorder + @intCast(i32, i) * soko.texHeight;
 
                 const texPtr = switch (texType) {
                     .floor => &texFloor,
@@ -191,23 +154,23 @@ fn checkWin() bool {
     return true;
 }
 
-fn move(act: ActType) bool {
-    if (act == ActType.none) {
+fn move(act: soko.ActType) bool {
+    if (act == soko.ActType.none) {
         workerMoved = false;
         return true;
     }
 
-    const destTex: TexType = getTexDirection(workerPos, act);
-    const workerNewPos: Pos = getNewPos(workerPos, act);
+    const destTex: soko.TexType = getTexDirection(workerPos, act);
+    const workerNewPos: soko.Pos = getNewPos(workerPos, act);
 
-    if (destTex == TexType.floor) {
+    if (destTex == soko.TexType.floor) {
         map.items[workerNewPos.y].items[workerNewPos.x] = .worker;
         map.items[workerPos.y].items[workerPos.x] = workerMovedToTex;
         workerMovedToTex = .floor;
         workerPos = workerNewPos;
     } else if (destTex == .box or destTex == .boxDocked) {
-        const boxDestTex: TexType = getTexDirection(workerNewPos, act);
-        const boxNewPos: Pos = getNewPos(workerNewPos, act);
+        const boxDestTex: soko.TexType = getTexDirection(workerNewPos, act);
+        const boxNewPos: soko.Pos = getNewPos(workerNewPos, act);
 
         map.items[boxNewPos.y].items[boxNewPos.x] = switch (boxDestTex) {
             .floor => .box,
@@ -241,8 +204,8 @@ fn move(act: ActType) bool {
     return true;
 }
 
-fn getTexDirection(pos: Pos, act: ActType) TexType {
-    const newPos: Pos = getNewPos(pos, act);
+fn getTexDirection(pos: soko.Pos, act: soko.ActType) soko.TexType {
+    const newPos: soko.Pos = getNewPos(pos, act);
     if (!isPosValid(newPos)) {
         return .none;
     } else {
@@ -250,7 +213,7 @@ fn getTexDirection(pos: Pos, act: ActType) TexType {
     }
 }
 
-fn isPosValid(position: Pos) bool {
+fn isPosValid(position: soko.Pos) bool {
     if (position.x <= 0) {
         return false;
     } else if (position.y <= 0) {
@@ -263,7 +226,7 @@ fn isPosValid(position: Pos) bool {
     return true;
 }
 
-fn getNewPos(oldPos: Pos, act: ActType) Pos {
+fn getNewPos(oldPos: soko.Pos, act: soko.ActType) soko.Pos {
     return switch (act) {
         .left => .{ .x = oldPos.x - 1, .y = oldPos.y },
         .right => .{ .x = oldPos.x + 1, .y = oldPos.y },
@@ -291,22 +254,22 @@ pub fn buildDisplayedMap() !void {
     mapDisplayed = result;
 }
 
-fn buildMap(givenMap: []u8) !std.ArrayList(std.ArrayList(TexType)) {
-    var result = std.ArrayList(std.ArrayList(TexType)).init(alloc);
-    var line = std.ArrayList(TexType).init(alloc);
+fn buildMap(givenMap: []u8) !std.ArrayList(std.ArrayList(soko.TexType)) {
+    var result = std.ArrayList(std.ArrayList(soko.TexType)).init(alloc);
+    var line = std.ArrayList(soko.TexType).init(alloc);
     defer line.deinit();
 
     if (givenMap.len == 0) return result;
 
     for (givenMap) |item| {
-        const itemEnumed = try TexType.convert(item);
-        if (itemEnumed == TexType.next) {
-            var added_line = std.ArrayList(TexType).init(alloc);
+        const itemEnumed = try soko.TexType.convert(item);
+        if (itemEnumed == soko.TexType.next) {
+            var added_line = std.ArrayList(soko.TexType).init(alloc);
             try added_line.appendSlice(line.items);
             try result.append(added_line);
 
             line.deinit();
-            line = std.ArrayList(TexType).init(alloc);
+            line = std.ArrayList(soko.TexType).init(alloc);
         } else {
             try line.append(itemEnumed);
         }
@@ -329,8 +292,8 @@ fn buildMap(givenMap: []u8) !std.ArrayList(std.ArrayList(TexType)) {
     }
 
     // make sure window is sized properly
-    screenWidth = (mapSizeWidth * texWidth) + 2 * mapBorder;
-    screenHeight = (mapSizeHeight * texHeight) + 2 * mapBorder;
+    screenWidth = (mapSizeWidth * soko.texWidth) + 2 * soko.mapBorder;
+    screenHeight = (mapSizeHeight * soko.texHeight) + 2 * soko.mapBorder;
 
     if (raylib.IsWindowReady()) raylib.SetWindowSize(screenWidth, screenHeight);
 

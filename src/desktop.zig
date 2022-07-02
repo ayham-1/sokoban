@@ -22,6 +22,7 @@ pub fn main() anyerror!void {
 
     try game.start(gameMap);
     defer game.stop();
+    defer alloc.free(gameMap);
 
     while (!raylib.WindowShouldClose() and !game.won) {
         game.loop(raylib.GetFrameTime());
