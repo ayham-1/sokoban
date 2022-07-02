@@ -1,6 +1,11 @@
+const std = @import("std");
+
 pub const texWidth: i32 = 32;
 pub const texHeight: i32 = 32;
 pub const mapBorder: i32 = 6;
+
+pub const MapRow = std.ArrayList(TexType);
+pub const Map = std.ArrayList(MapRow);
 
 pub const MapError = error{MapError};
 
@@ -35,3 +40,8 @@ pub const TexType = enum(u8) {
 
 pub const ActType = enum(u5) { up, down, left, right, none };
 pub const Pos = struct { x: usize, y: usize };
+
+pub const BoxGoalPair = struct {
+    box: Pos,
+    goal: Pos,
+};
