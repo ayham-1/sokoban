@@ -101,30 +101,79 @@ pub fn computeCongestion(map: Map, boxGoalPairs: std.ArrayList(soko.BoxGoalPair)
 /// returns the number of blocks in a map that are not 3x3 blobs.
 pub fn compute3x3Blocks(
     map: Map,
-) !f32 {
+) !i32 {
     // calculate area
-    var areaMap: usize = map.rows.items.len * map.rows.items.len;
+    var areaMap: i32 = @intCast(i32, map.rows.items.len * map.rows.items[0].items.len);
 
-    // calculate 3x3 area
-    var i: usize = 0;
-    var j: usize = 0;
-    while (i < map.rows.items.len) {
-        defer i += 2;
-        while (j < map.rows.items.len) {
+    // generate map search state
+    var mapCheckState = try std.ArrayList(std.ArrayList(bool)).initCapacity(alloc, map.rows.items.len);
+    for (map.rows.items) |row| {
+        var newRow = try std.ArrayList(bool).initCapacity(alloc, row.items.len);
+        for (row.items) |_| {
+            try newRow.append(false);
+        }
+        try mapCheckState.append(newRow);
+    }
+    defer {
+        for (mapCheckState.items) |row| {
+            row.deinit();
+        }
+        mapCheckState.deinit();
+    }
+
+    // count number of 3x3 area which are all similar
+    var nSimilar3x3: i32 = 0;
+    for (map.rows.items) |row, i| {
+        var j: usize = 0;
+        while (j + 3 < row.items.len) {
+            defer j += 1;
+            if (mapCheckState.items[i].items[j] == true) continue;
+
             var slice3x3: soko.MapArray = soko.MapArray.init(alloc);
-            defer j += 2;
-            for (map.rows.items[i .. i + 3]) |row| {
+            defer {
+                for (slice3x3.items) |sliceRow| {
+                    sliceRow.deinit();
+                }
+                slice3x3.deinit();
+            }
+            var iOffset: usize = @minimum(map.rows.items.len, i + 3);
+            var jOffset: usize = @minimum(map.rows.items[0].items.len, j + 3);
+            for (map.rows.items[i..iOffset]) |sliceRow| {
                 var newRow = soko.MapRowArray.init(alloc);
-                for (row.items[j .. j + 3]) |item| {
-                    try newRow.append(item);
+                for (sliceRow.items[j..jOffset]) |sliceItem| {
+                    try newRow.append(sliceItem);
                 }
                 try slice3x3.append(newRow);
             }
-            log.warn("hello", .{});
-            log.warn("{s}", .{(try Map.buildDisplayed(alloc, slice3x3)).items});
+
+            if (slice3x3.items.len != 3) break;
+            if (slice3x3.items[0].items.len != 3) break;
+            var prevItem: soko.TexType = slice3x3.items[0].items[0];
+            var similar: bool = true;
+            sliceCheck: for (slice3x3.items) |sliceRow| {
+                for (sliceRow.items) |sliceItem| {
+                    if (sliceItem != prevItem) {
+                        similar = false;
+                        break :sliceCheck;
+                    }
+                }
+            }
+
+            if (similar) {
+                // update all mapCheckState relevant data
+                for (map.rows.items[i..iOffset]) |_, sliceI| {
+                    for (map.rows.items[sliceI].items[j..jOffset]) |_, sliceJ| {
+                        mapCheckState.items[i + sliceI].items[j + sliceJ] = true;
+                    }
+                }
+
+                j += 2;
+                nSimilar3x3 += 1;
+                log.warn("added to cunt counter", .{});
+            }
         }
     }
 
-    _ = areaMap;
-    return 0.0;
+    log.warn("{}", .{nSimilar3x3});
+    return areaMap - (9 * nSimilar3x3);
 }

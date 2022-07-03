@@ -12,10 +12,10 @@ var alloc = zalloc.allocator();
 pub fn main() anyerror!void {
     var testMap =
         \\#www#www#wwwwww#
-        \\w...w...w......w
-        \\w.pbbbd........w
-        \\w.bbdd..w......w
-        \\w.bdbd..w......w
+        \\w...w.w.w.w....w
+        \\w.pb..d.w...w..w
+        \\w.......w......w
+        \\w.......w......w
         \\wwwwwwwwwwwwwwww
         \\
     ;
@@ -35,7 +35,7 @@ pub fn main() anyerror!void {
     try boxPairs.append(soko.BoxGoalPair{ .box = soko.Pos{ .x = 2, .y = 3 }, .goal = soko.Pos{ .x = 5, .y = 3 } });
     std.log.warn("{}", .{try gen.computeCongestion(game.puzzle.map, boxPairs, 1, 1, 1)});
 
-    _ = try gen.compute3x3Blocks(game.puzzle.map);
+    std.log.warn("{}", .{try gen.compute3x3Blocks(game.puzzle.map)});
 
     while (!raylib.WindowShouldClose() and !game.won) {
         game.loop(raylib.GetFrameTime());
