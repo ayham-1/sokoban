@@ -2,7 +2,7 @@ const std = @import("std");
 const raylib = @import("raylib/raylib.zig");
 
 const game = @import("game.zig");
-const puzzle = @import("puzzle.zig");
+const gen = @import("generator.zig");
 const soko = @import("constants.zig");
 
 const ZecsiAllocator = @import("allocator.zig").ZecsiAllocator;
@@ -33,7 +33,9 @@ pub fn main() anyerror!void {
     defer boxPairs.deinit();
     try boxPairs.append(soko.BoxGoalPair{ .box = soko.Pos{ .x = 4, .y = 2 }, .goal = soko.Pos{ .x = 6, .y = 2 } });
     try boxPairs.append(soko.BoxGoalPair{ .box = soko.Pos{ .x = 2, .y = 3 }, .goal = soko.Pos{ .x = 5, .y = 3 } });
-    std.log.warn("{}", .{try puzzle.computeCongestion(game.map, boxPairs, 1, 1, 1)});
+    std.log.warn("{}", .{try gen.computeCongestion(game.puzzle.map, boxPairs, 1, 1, 1)});
+
+    _ = try gen.compute3x3Blocks(game.puzzle.map);
 
     while (!raylib.WindowShouldClose() and !game.won) {
         game.loop(raylib.GetFrameTime());

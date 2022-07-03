@@ -7,10 +7,9 @@ const ZecsiAllocator = @import("allocator.zig").ZecsiAllocator;
 var zalloc = ZecsiAllocator{};
 var alloc = zalloc.allocator();
 
-const puzzle = @import("puzzle.zig");
-
-const mapzig = @import("map.zig");
-pub var map: mapzig.Map = undefined;
+const Map = @import("map.zig").Map;
+const Puzzle = @import("puzzle.zig").Puzzle;
+pub var puzzle: Puzzle = undefined;
 
 var screenWidth: i32 = undefined;
 var screenHeight: i32 = undefined;
@@ -27,11 +26,11 @@ pub var workerInputStopped: bool = false;
 pub var won: bool = false;
 
 pub fn start(givenMap: []u8) !void {
-    map = mapzig.Map.init(alloc);
-    try map.buildMap(givenMap);
+    puzzle = Puzzle.init(alloc);
+    try puzzle.map.build(givenMap);
 
-    screenWidth = (map.sizeWidth * soko.texWidth) + 2 * soko.mapBorder;
-    screenHeight = (map.sizeHeight * soko.texHeight) + 2 * soko.mapBorder;
+    screenWidth = (puzzle.map.sizeWidth * soko.texWidth) + 2 * soko.mapBorder;
+    screenHeight = (puzzle.map.sizeHeight * soko.texHeight) + 2 * soko.mapBorder;
 
     raylib.InitWindow(screenWidth, screenHeight, "sokoban");
 
@@ -50,7 +49,7 @@ pub fn start(givenMap: []u8) !void {
 }
 
 pub fn stop() void {
-    map.deinit();
+    puzzle.deinit();
     if (zalloc.deinit()) {
         log.err("memory leaks detected!", .{});
     }
@@ -71,20 +70,20 @@ pub fn loop(dt: f32) void {
     if (won) return;
 
     // Update
-    if (!workerInputStopped and map.rows.items.len != 0) {
+    if (!workerInputStopped and puzzle.map.rows.items.len != 0) {
         won = checkWin();
 
         var moveResult: bool = true;
         if (raylib.IsKeyPressed(.KEY_D)) {
-            moveResult = map.move(soko.ActType.right);
+            moveResult = puzzle.move(soko.ActType.right);
         } else if (raylib.IsKeyPressed(.KEY_A)) {
-            moveResult = map.move(soko.ActType.left);
+            moveResult = puzzle.move(soko.ActType.left);
         } else if (raylib.IsKeyPressed(.KEY_W)) {
-            moveResult = map.move(soko.ActType.up);
+            moveResult = puzzle.move(soko.ActType.up);
         } else if (raylib.IsKeyPressed(.KEY_S)) {
-            moveResult = map.move(soko.ActType.down);
+            moveResult = puzzle.move(soko.ActType.down);
         } else {
-            moveResult = map.move(soko.ActType.none);
+            moveResult = puzzle.move(soko.ActType.none);
         }
 
         if (!moveResult) {
@@ -98,11 +97,11 @@ pub fn loop(dt: f32) void {
         defer raylib.EndDrawing();
         raylib.ClearBackground(raylib.BLACK);
 
-        if (map.rows.items.len == 0) {
+        if (puzzle.map.rows.items.len == 0) {
             drawTextCenter("EMPTY PUZZLE", raylib.RED);
         }
 
-        for (map.rows.items) |row, i| {
+        for (puzzle.map.rows.items) |row, i| {
             columned: for (row.items) |texType, j| {
                 // find coords value of current box
                 var x: i32 = soko.mapBorder + @intCast(i32, j) * soko.texWidth;
@@ -135,8 +134,8 @@ pub fn loop(dt: f32) void {
 }
 
 fn checkWin() bool {
-    if (map.rows.items.len == 0) return false;
-    for (map.rows.items) |row| {
+    if (puzzle.map.rows.items.len == 0) return false;
+    for (puzzle.map.rows.items) |row| {
         for (row.items) |texType| {
             if (texType == .dock) return false;
             if (texType == .workerDocked) return false;
@@ -158,12 +157,12 @@ fn drawTextCenter(str: [*:0]const u8, color: raylib.Color) void {
     raylib.DrawText(str, textLocationX, textLocationY, 23, color);
 }
 
-pub fn updateMap(givenMap: []u8) !void {
-    try map.buildMap(givenMap);
+pub fn updatepuzzle(givenMap: []u8) !void {
+    try puzzle.buildMap(givenMap);
 
     // make sure window is sized properly
-    screenWidth = (map.sizeWidth * soko.texWidth) + 2 * soko.mapBorder;
-    screenHeight = (map.sizeHeight * soko.texHeight) + 2 * soko.mapBorder;
+    screenWidth = (puzzle.sizeWidth * soko.texWidth) + 2 * soko.mapBorder;
+    screenHeight = (puzzle.sizeHeight * soko.texHeight) + 2 * soko.mapBorder;
 
     if (raylib.IsWindowReady()) raylib.SetWindowSize(screenWidth, screenHeight);
 }

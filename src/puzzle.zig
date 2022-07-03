@@ -1,94 +1,103 @@
-//! This modules provides a set of algorithms to generate random sokoban puzzles.
-//! Follows a study from University of Minnesota, authored by Bilal Kartal,
-//! Nick Sohre and Stephen J. Guy, titled: "Data-Driven Sokoban Puzzle Generation
-//! with Monte Carlo Tree Search", published on 2021-06-25.
-//!
-//! link: http://motion.cs.umn.edu/r/sokoban-pcg
-//!
-//! Formal Citation (needed? appropriate?):
-//! Kartal, B., Sohre, N., & Guy, S. (2021). 
-//! Data Driven Sokoban Puzzle Generation with Monte Carlo Tree Search. 
-//! Proceedings of the AAAI Conference on Artificial Intelligence 
-//! and Interactive Digital Entertainment, 
-//! 12(1), 
-//! 58-64. 
-//! Retrieved from https://ojs.aaai.org/index.php/AIIDE/article/view/12859
-
 const std = @import("std");
-const log = @import("log.zig");
 const soko = @import("constants.zig");
 const mapzig = @import("map.zig");
 const Map = mapzig.Map;
 
-const ZecsiAllocator = @import("allocator.zig").ZecsiAllocator;
-var zalloc = ZecsiAllocator{};
-var alloc = zalloc.allocator();
+const Allocator = std.mem.Allocator;
 
-pub fn generateRandom(levelWidth: u8, levelHeight: u8, boxesCount: u8) []u8 {
-    var map = soko.Map.init(alloc, levelHeight);
-    for (map.items) |row| {
-        row = std.ArrayList(soko.TexType).init(alloc, levelWidth);
+pub const Puzzle = struct {
+    alloc: Allocator,
+    map: Map = undefined,
+
+    workerMovedToTex: soko.TexType = .floor,
+    workerMoved: bool = false,
+
+    pub fn init(allocator: Allocator) Puzzle {
+        return Puzzle{ .alloc = allocator, .map = Map.init(allocator) };
     }
 
-    _ = levelWidth;
-    _ = levelHeight;
-    _ = boxesCount;
-}
-
-/// The higher the return value the higher the congested factor of the sokoban
-/// puzzle given. Meaning, puzzles with overlapping box path solutions are
-/// valued more. This also factors the amount of obstacles present.
-///
-/// map - Sokoban puzzle to evaluate its congestion value.
-/// boxPairs - list of bounding rectangles of every box and its final position/goal
-///
-/// returns the congestion feature analysis factor
-pub fn computeCongestion(map: Map, boxGoalPairs: std.ArrayList(soko.BoxGoalPair), wBoxCount: f32, wGoalCount: f32, wObstacleCount: f32) !f32 {
-    var congestion: f32 = 0.0;
-    for (boxGoalPairs.items) |pair| {
-        // retreive the bounding rectangle
-        const xMax = @maximum(pair.box.x, pair.goal.x);
-        const xMin = @minimum(pair.box.x, pair.goal.x);
-        const yMax = @maximum(pair.box.y, pair.goal.y);
-        const yMin = @minimum(pair.box.y, pair.goal.y);
-
-        var boundingBox: soko.Map = soko.Map.init(alloc);
-        defer {
-            for (boundingBox.items) |item| {
-                item.deinit();
-            }
-            boundingBox.deinit();
-        }
-
-        for (map.rows.items[yMin .. yMax + 1]) |row| {
-            var newRow = soko.MapRow.init(alloc);
-            for (row.items[xMin .. xMax + 1]) |item| {
-                try newRow.append(item);
-            }
-            try boundingBox.append(newRow);
-        }
-        log.warn("{s}", .{boundingBox.items});
-
-        // count & calculate the congestion variables
-        var boxArea: f32 = @intToFloat(f32, std.math.absCast((xMax + 1) - xMin + 1) * std.math.absCast((yMax + 1) - yMin));
-        var nInitialBoxes: f32 = 0;
-        var nGoal: f32 = 0;
-        var nObstacles: f32 = 0;
-        for (boundingBox.items) |row| {
-            for (row.items) |item| {
-                switch (item) {
-                    .box => nInitialBoxes += 1,
-                    .boxDocked => nGoal += 1,
-                    .dock => nGoal += 1,
-                    .wall => nObstacles += 1,
-                    .none => nObstacles += 1,
-                    else => {},
-                }
-            }
-        }
-
-        // calculate factor and sum
-        congestion += (wBoxCount * nInitialBoxes + wGoalCount * nGoal) / (wObstacleCount * (boxArea - nObstacles));
+    pub fn deinit(self: *Puzzle) void {
+        self.map.deinit();
     }
-    return congestion;
-}
+
+    pub fn move(self: *Puzzle, act: soko.ActType) bool {
+        if (act == soko.ActType.none) {
+            self.workerMoved = false;
+            return true;
+        }
+
+        const destTex: soko.TexType = self.getTexDirection(self.map.workerPos, act);
+        const workerNewPos: soko.Pos = Puzzle.getNewPos(self.map.workerPos, act);
+
+        if (destTex == soko.TexType.floor) {
+            self.map.rows.items[workerNewPos.y].items[workerNewPos.x] = .worker;
+            self.map.rows.items[self.map.workerPos.y].items[self.map.workerPos.x] = self.workerMovedToTex;
+            self.workerMovedToTex = .floor;
+            self.map.workerPos = workerNewPos;
+        } else if (destTex == .box or destTex == .boxDocked) {
+            const boxDestTex: soko.TexType = self.getTexDirection(workerNewPos, act);
+            const boxNewPos: soko.Pos = Puzzle.getNewPos(workerNewPos, act);
+
+            self.map.rows.items[boxNewPos.y].items[boxNewPos.x] = switch (boxDestTex) {
+                .floor => .box,
+                .dock => .boxDocked,
+                else => return false,
+            };
+
+            self.map.rows.items[workerNewPos.y].items[workerNewPos.x] = switch (destTex) {
+                .box => .worker,
+                .boxDocked => .workerDocked,
+                else => return false,
+            };
+            self.map.rows.items[self.map.workerPos.y].items[self.map.workerPos.x] = self.workerMovedToTex;
+
+            self.workerMovedToTex = switch (destTex) {
+                .box => .floor,
+                .boxDocked => .dock,
+                else => return false,
+            };
+            self.map.workerPos = workerNewPos;
+        } else if (destTex == .dock) {
+            self.map.rows.items[workerNewPos.y].items[workerNewPos.x] = .workerDocked;
+            self.map.rows.items[self.map.workerPos.y].items[self.map.workerPos.x] = .floor;
+            self.workerMovedToTex = .dock;
+            self.map.workerPos = workerNewPos;
+        } else {
+            self.workerMoved = false;
+            return false;
+        }
+        self.workerMoved = true;
+        return true;
+    }
+    fn getTexDirection(self: Puzzle, pos: soko.Pos, act: soko.ActType) soko.TexType {
+        const newPos: soko.Pos = getNewPos(pos, act);
+        if (!self.isPosValid(newPos)) {
+            return .none;
+        } else {
+            return self.map.rows.items[newPos.y].items[newPos.x];
+        }
+    }
+
+    fn isPosValid(self: Puzzle, position: soko.Pos) bool {
+        if (position.x <= 0) {
+            return false;
+        } else if (position.y <= 0) {
+            return false;
+        } else if (position.y >= self.map.rows.items.len) {
+            return false;
+        } else if (position.x >= self.map.rows.items[position.y].items.len) {
+            return false;
+        }
+        return true;
+    }
+
+    fn getNewPos(oldPos: soko.Pos, act: soko.ActType) soko.Pos {
+        return switch (act) {
+            .left => .{ .x = oldPos.x - 1, .y = oldPos.y },
+            .right => .{ .x = oldPos.x + 1, .y = oldPos.y },
+            .up => .{ .x = oldPos.x, .y = oldPos.y - 1 },
+            .down => .{ .x = oldPos.x, .y = oldPos.y + 1 },
+            .none => oldPos,
+        };
+    }
+};

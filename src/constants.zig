@@ -4,8 +4,8 @@ pub const texWidth: i32 = 32;
 pub const texHeight: i32 = 32;
 pub const mapBorder: i32 = 6;
 
-pub const MapRow = std.ArrayList(TexType);
-pub const Map = std.ArrayList(MapRow);
+pub const MapRowArray = std.ArrayList(TexType);
+pub const MapArray = std.ArrayList(MapRowArray);
 
 pub const MapError = error{MapError};
 
