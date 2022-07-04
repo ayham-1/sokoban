@@ -15,6 +15,7 @@
 //! 12(1), 
 //! 58-64. 
 //! Retrieved from https://ojs.aaai.org/index.php/AIIDE/article/view/12859
+//! TODO: remove public property
 
 const std = @import("std");
 const log = @import("log.zig");
@@ -32,6 +33,22 @@ pub fn generateRandom(levelSize: u8, boxesCount: u8) []u8 {
     }
 
     _ = boxesCount;
+}
+
+/// Computes map evaluation
+///
+/// weightSlice3x3 - weight value
+/// weightCongestion - weight value
+/// weightBoxCount - weight value
+///
+/// slice3x3Val - value
+/// congestionVal - value
+/// boxCount - value
+///
+/// returns - float value of evaluation
+pub fn computeMapEval(weightSlice3x3: f32, weightCongestion: f32, weightBoxCount: f32, slice3x3Val: i32, congestionVal: f32, boxCount: i32) !f32 {
+    const k = 50;
+    return (weightSlice3x3 * slice3x3Val + weightCongestion * congestionVal + weightBoxCount * boxCount) / k;
 }
 
 /// The higher the return value the higher the congested factor of the sokoban
@@ -66,7 +83,6 @@ pub fn computeCongestion(map: Map, boxGoalPairs: std.ArrayList(soko.BoxGoalPair)
             }
             try boundingBox.append(newRow);
         }
-        log.warn("{s}", .{boundingBox.items});
 
         // count & calculate the congestion variables
         var boxArea: f32 = @intToFloat(f32, std.math.absCast((xMax + 1) - xMin + 1) * std.math.absCast((yMax + 1) - yMin));
@@ -169,11 +185,8 @@ pub fn compute3x3Blocks(
 
                 j += 2;
                 nSimilar3x3 += 1;
-                log.warn("added to cunt counter", .{});
             }
         }
     }
-
-    log.warn("{}", .{nSimilar3x3});
     return areaMap - (9 * nSimilar3x3);
 }
