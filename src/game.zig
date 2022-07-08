@@ -26,7 +26,7 @@ pub var workerInputStopped: bool = false;
 pub var won: bool = false;
 
 pub fn start(givenMap: []u8) !void {
-    puzzle = Puzzle.init(alloc);
+    puzzle = Puzzle.init(alloc, Map.init(alloc));
     try puzzle.map.build(givenMap);
 
     screenWidth = (puzzle.map.sizeWidth * soko.texWidth) + 2 * soko.mapBorder;
@@ -107,7 +107,7 @@ pub fn loop(dt: f32) void {
                 var x: i32 = soko.mapBorder + @intCast(i32, j) * soko.texWidth;
                 var y: i32 = soko.mapBorder + @intCast(i32, i) * soko.texHeight;
 
-                const texPtr = switch (texType) {
+                const texPtr = switch (texType.tex) {
                     .floor => &texFloor,
                     .wall => &texWall,
                     .dock => &texDock,
@@ -137,8 +137,8 @@ fn checkWin() bool {
     if (puzzle.map.rows.items.len == 0) return false;
     for (puzzle.map.rows.items) |row| {
         for (row.items) |texType| {
-            if (texType == .dock) return false;
-            if (texType == .workerDocked) return false;
+            if (texType.tex == .dock) return false;
+            if (texType.tex == .workerDocked) return false;
         }
     }
     return true;
@@ -157,7 +157,7 @@ fn drawTextCenter(str: [*:0]const u8, color: raylib.Color) void {
     raylib.DrawText(str, textLocationX, textLocationY, 23, color);
 }
 
-pub fn updatepuzzle(givenMap: []u8) !void {
+pub fn updateMap(givenMap: []u8) !void {
     try puzzle.buildMap(givenMap);
 
     // make sure window is sized properly

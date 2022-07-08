@@ -6,7 +6,8 @@ const Allocator = std.mem.Allocator;
 pub const Map = struct {
     alloc: Allocator,
     rows: soko.MapArray,
-    displayed: std.ArrayList(u8),
+    highestId: u8 = 1,
+    displayed: std.ArrayList(u8) = undefined,
     sizeWidth: i32 = 0,
     sizeHeight: i32 = 0,
     workerPos: soko.Pos = undefined,
@@ -27,12 +28,13 @@ pub const Map = struct {
         self.displayed.deinit();
     }
 
-    pub fn buildDisplayed(alloc: Allocator, rows: soko.MapArray) !std.ArrayList(u8) {
-        var result = std.ArrayList(u8).init(alloc);
+    // TODO: consider renaming to getDisplayed()
+    pub fn buildDisplayed(self: *Map) !void {
+        var result = std.ArrayList(u8).init(self.alloc);
 
-        for (rows.items) |row| {
+        for (self.rows.items) |row| {
             for (row.items) |item| {
-                try result.append(@enumToInt(item));
+                try result.append(@enumToInt(item.tex));
             }
             const builtin = @import("builtin");
             if (builtin.os.tag == .wasi) {
@@ -41,12 +43,13 @@ pub const Map = struct {
                 try result.append('\n');
             }
         }
-        return result;
+        self.displayed.deinit();
+        self.displayed = result;
     }
 
     pub fn build(self: *Map, givenMap: []u8) !void {
         var result = soko.MapArray.init(self.alloc);
-        var line = std.ArrayList(soko.TexType).init(self.alloc);
+        var line = soko.MapRowArray.init(self.alloc);
         defer line.deinit();
 
         if (givenMap.len == 0) return;
@@ -54,14 +57,15 @@ pub const Map = struct {
         for (givenMap) |item| {
             const itemEnumed = try soko.TexType.convert(item);
             if (itemEnumed == soko.TexType.next) {
-                var added_line = std.ArrayList(soko.TexType).init(self.alloc);
+                var added_line = soko.MapRowArray.init(self.alloc);
                 try added_line.appendSlice(line.items);
                 try result.append(added_line);
 
                 line.deinit();
-                line = std.ArrayList(soko.TexType).init(self.alloc);
+                line = std.ArrayList(soko.Textile).init(self.alloc);
             } else {
-                try line.append(itemEnumed);
+                try line.append(soko.Textile{ .tex = itemEnumed, .id = self.highestId });
+                self.highestId += 1;
             }
 
             if (itemEnumed == .worker or itemEnumed == .workerDocked) {
@@ -83,5 +87,20 @@ pub const Map = struct {
 
         self.rows.deinit();
         self.rows = result;
+    }
+
+    pub fn getBoxPositions(self: *Map) std.ArrayList(.{ u8, soko.Pos }) {
+        var boxPositions = std.ArrayList(soko.Pos).init(self.alloc);
+
+        for (self.rows.items) |row, i| {
+            for (row.items) |item, j| {
+                switch (item.tex) {
+                    .box => boxPositions.append(soko.Pos{ .x = j, .y = i }),
+                    else => {},
+                }
+            }
+        }
+
+        return boxPositions;
     }
 };

@@ -4,11 +4,12 @@ pub const texWidth: i32 = 32;
 pub const texHeight: i32 = 32;
 pub const mapBorder: i32 = 6;
 
-pub const MapRowArray = std.ArrayList(TexType);
+pub const MapRowArray = std.ArrayList(Textile);
 pub const MapArray = std.ArrayList(MapRowArray);
 
 pub const MapError = error{MapError};
 
+pub const Textile = struct { tex: TexType, id: u8 };
 pub const TexType = enum(u8) {
     floor = '.',
     wall = 'w',
