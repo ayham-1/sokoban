@@ -11,7 +11,7 @@ pub const Puzzle = struct {
     alloc: Allocator,
     map: Map = undefined,
 
-    workerMovedToTile: soko.Textile = soko.Textile{ .tex = .floor, .id = std.math.maxInt(u4) },
+    workerMovedToTile: soko.Textile = soko.Textile{ .tex = .floor, .id = std.math.maxInt(u8) },
     workerMoved: bool = false,
 
     pub fn init(allocator: Allocator, map: Map) Puzzle {
@@ -20,20 +20,18 @@ pub const Puzzle = struct {
     }
 
     pub fn deinit(self: *Puzzle) void {
-        self.map.deinit();
-        const builtin = @import("builtin");
-        std.log.warn("strip {} ", .{builtin.strip_debug_info});
-        std.log.warn("helll", .{});
+        //self.map.deinit();
+        _ = self;
     }
 
-    pub fn move(self: *Puzzle, act: soko.ActType) bool {
+    pub fn move(self: *Puzzle, act: soko.ActType) !void {
         if (act == soko.ActType.none) {
             self.workerMoved = false;
-            return true;
+            return;
         }
 
-        const destTile: soko.Textile = self.getTexDirection(self.map.workerPos, act);
-        const workerNewPos: soko.Pos = Puzzle.getNewPos(self.map.workerPos, act);
+        const destTile: soko.Textile = try self.getTexDirection(self.map.workerPos, act);
+        const workerNewPos: soko.Pos = try self.getNewPos(self.map.workerPos, act);
 
         if (destTile.tex == soko.TexType.floor) {
             self.map.rows.items[workerNewPos.y].items[workerNewPos.x] = self.getWorkerTile();
@@ -42,76 +40,80 @@ pub const Puzzle = struct {
             self.workerMovedToTile = destTile;
             self.map.workerPos = workerNewPos;
         } else if (destTile.tex == .box or destTile.tex == .boxDocked) {
-            const boxDestTile: soko.Textile = self.getTexDirection(workerNewPos, act);
-            const boxNewPos: soko.Pos = Puzzle.getNewPos(workerNewPos, act);
+            const boxDestTile: soko.Textile = try self.getTexDirection(workerNewPos, act);
+            const boxNewPos: soko.Pos = try self.getNewPos(workerNewPos, act);
 
             // switch box's destination with current box location
             self.map.rows.items[boxNewPos.y].items[boxNewPos.x].tex = switch (boxDestTile.tex) {
                 .floor => .box,
                 .dock => .boxDocked,
-                else => return false,
+                else => return error.InvalidPos,
             };
-            self.map.rows.items[boxNewPos.y].items[boxNewPos.x].id = boxDestTile.id; // retain id
+            self.map.rows.items[boxNewPos.y].items[boxNewPos.x].id = destTile.id; // retain id
 
             // switch workerNewPos, originally box location, with current workerPos
             self.map.rows.items[workerNewPos.y].items[workerNewPos.x].tex = switch (destTile.tex) {
                 .box => .worker,
                 .boxDocked => .workerDocked,
-                else => return false,
+                else => return error.InvalidPos,
             };
-            self.map.rows.items[workerNewPos.y].items[workerNewPos.x].id = destTile.id; // retain id
+            self.map.rows.items[workerNewPos.y].items[workerNewPos.x].id = self.getWorkerTile().id; // retain id
             self.map.rows.items[self.map.workerPos.y].items[self.map.workerPos.x] = self.workerMovedToTile;
 
             self.workerMovedToTile.tex = switch (destTile.tex) {
                 .box => .floor,
                 .boxDocked => .dock,
-                else => return false,
+                else => return error.InvalidPos,
             };
-            self.workerMovedToTile.id = destTile.id; // retain id
+            self.workerMovedToTile.id = 0; // retain id
 
             self.map.workerPos = workerNewPos;
         } else if (destTile.tex == .dock) {
             self.map.rows.items[workerNewPos.y].items[workerNewPos.x].tex = .workerDocked;
-            self.map.rows.items[self.map.workerPos.y].items[self.map.workerPos.x].tex = .floor;
+            self.map.rows.items[self.map.workerPos.y].items[self.map.workerPos.x] = self.workerMovedToTile;
             self.workerMovedToTile = destTile;
             self.map.workerPos = workerNewPos;
         } else {
             self.workerMoved = false;
-            return false;
+            return error.InvalidPos;
         }
         self.workerMoved = true;
-        return true;
+
+        return;
     }
-    fn getTexDirection(self: Puzzle, pos: soko.Pos, act: soko.ActType) soko.Textile {
-        const newPos: soko.Pos = getNewPos(pos, act);
-        if (!self.isPosValid(newPos)) {
-            return soko.Textile{ .tex = .none, .id = 0 };
-        } else {
-            return self.map.rows.items[newPos.y].items[newPos.x];
-        }
+    fn getTexDirection(self: Puzzle, pos: soko.Pos, act: soko.ActType) !soko.Textile {
+        const newPos: soko.Pos = try self.getNewPos(pos, act);
+        return self.map.rows.items[newPos.y].items[newPos.x];
     }
 
-    fn isPosValid(self: Puzzle, position: soko.Pos) bool {
-        if (position.x <= 0) {
-            return false;
-        } else if (position.y <= 0) {
-            return false;
-        } else if (position.y >= self.map.rows.items.len) {
-            return false;
-        } else if (position.x >= self.map.rows.items[position.y].items.len) {
-            return false;
+    fn getNewPos(self: Puzzle, oldPos: soko.Pos, act: soko.ActType) !soko.Pos {
+        var newPos = oldPos;
+        switch (act) {
+            .left => {
+                if (oldPos.x == 0)
+                    return error.InvalidPos;
+                newPos = .{ .x = oldPos.x - 1, .y = oldPos.y };
+            },
+            .right => {
+                if (oldPos.x + 1 >= self.map.rows.items[oldPos.y].items.len)
+                    return error.InvalidPos;
+                newPos = .{ .x = oldPos.x + 1, .y = oldPos.y };
+            },
+            .up => {
+                if (oldPos.y == 0)
+                    return error.InvalidPos;
+                newPos = .{ .x = oldPos.x, .y = oldPos.y - 1 };
+            },
+            .down => {
+                if (oldPos.y + 1 >= self.map.rows.items.len)
+                    return error.InvalidPos;
+                newPos = .{ .x = oldPos.x, .y = oldPos.y + 1 };
+            },
+            .none => {
+                newPos = oldPos;
+            },
         }
-        return true;
-    }
-
-    fn getNewPos(oldPos: soko.Pos, act: soko.ActType) soko.Pos {
-        return switch (act) {
-            .left => .{ .x = oldPos.x - 1, .y = oldPos.y },
-            .right => .{ .x = oldPos.x + 1, .y = oldPos.y },
-            .up => .{ .x = oldPos.x, .y = oldPos.y - 1 },
-            .down => .{ .x = oldPos.x, .y = oldPos.y + 1 },
-            .none => oldPos,
-        };
+        return newPos;
     }
 
     pub fn fillBoxPairsWithBoxes(self: *Puzzle, boxes: std.ArrayList(soko.Pos)) void {

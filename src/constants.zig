@@ -8,6 +8,7 @@ pub const MapRowArray = std.ArrayList(Textile);
 pub const MapArray = std.ArrayList(MapRowArray);
 
 pub const MapError = error{MapError};
+pub const InvalidPos = error{InvalidPos};
 
 pub const Textile = struct { tex: TexType, id: u8 };
 pub const TexType = enum(u8) {
@@ -41,6 +42,7 @@ pub const TexType = enum(u8) {
 
 pub const ActType = enum(u5) { up, down, left, right, none };
 pub const Pos = struct { x: usize, y: usize };
+pub const IdPos = struct { id: u8, pos: Pos };
 
 pub const BoxGoalPair = struct {
     box: Pos,

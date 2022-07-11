@@ -25,9 +25,8 @@ pub var workerInputStopped: bool = false;
 
 pub var won: bool = false;
 
-pub fn start(givenMap: []u8) !void {
-    puzzle = Puzzle.init(alloc, Map.init(alloc));
-    try puzzle.map.build(givenMap);
+pub fn start(givenMap: Map) !void {
+    puzzle = Puzzle.init(alloc, givenMap);
 
     screenWidth = (puzzle.map.sizeWidth * soko.texWidth) + 2 * soko.mapBorder;
     screenHeight = (puzzle.map.sizeHeight * soko.texHeight) + 2 * soko.mapBorder;
@@ -73,22 +72,21 @@ pub fn loop(dt: f32) void {
     if (!workerInputStopped and puzzle.map.rows.items.len != 0) {
         won = checkWin();
 
-        var moveResult: bool = true;
+        var act: soko.ActType = soko.ActType.none;
         if (raylib.IsKeyPressed(.KEY_D)) {
-            moveResult = puzzle.move(soko.ActType.right);
+            act = soko.ActType.right;
         } else if (raylib.IsKeyPressed(.KEY_A)) {
-            moveResult = puzzle.move(soko.ActType.left);
+            act = soko.ActType.left;
         } else if (raylib.IsKeyPressed(.KEY_W)) {
-            moveResult = puzzle.move(soko.ActType.up);
+            act = soko.ActType.up;
         } else if (raylib.IsKeyPressed(.KEY_S)) {
-            moveResult = puzzle.move(soko.ActType.down);
+            act = soko.ActType.down;
         } else {
-            moveResult = puzzle.move(soko.ActType.none);
+            act = soko.ActType.none;
         }
-
-        if (!moveResult) {
+        puzzle.move(act) catch {
             log.warn("Can't move there!", .{});
-        }
+        };
     }
 
     //Draw
@@ -139,6 +137,7 @@ fn checkWin() bool {
         for (row.items) |texType| {
             if (texType.tex == .dock) return false;
             if (texType.tex == .workerDocked) return false;
+            if (texType.tex == .box) return false;
         }
     }
     return true;
@@ -158,7 +157,7 @@ fn drawTextCenter(str: [*:0]const u8, color: raylib.Color) void {
 }
 
 pub fn updateMap(givenMap: []u8) !void {
-    try puzzle.buildMap(givenMap);
+    try puzzle.map.buildMap(givenMap);
 
     // make sure window is sized properly
     screenWidth = (puzzle.sizeWidth * soko.texWidth) + 2 * soko.mapBorder;

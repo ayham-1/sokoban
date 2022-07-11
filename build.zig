@@ -171,10 +171,11 @@ pub fn build(b: *std.build.Builder) !void {
             std.log.info("\n\nOutput files will be in {s}\n---\ncd {s}\npython -m http.server\n---\n\nbuilding...", .{ webOutDir, webOutDir });
         },
         else => {
-            std.log.info("building for desktop\n", .{});
+            std.log.info("building for desktop, with {}\n", .{mode});
             const exe = b.addExecutable(APP_NAME, "src/desktop.zig");
             exe.setTarget(target);
             exe.setBuildMode(mode);
+            exe.pie = true;
 
             const rayBuild = @import("src/raylib/raylib/src/build.zig");
             const raylib = rayBuild.addRaylib(b, target);
@@ -183,28 +184,6 @@ pub fn build(b: *std.build.Builder) !void {
             exe.addIncludeDir(raylibSrc ++ "extras/");
             exe.addIncludeDir(bindingSrc);
             exe.addCSourceFile(bindingSrc ++ "marshal.c", &.{});
-
-            switch (raylib.target.getOsTag()) {
-                //dunno why but macos target needs sometimes 2 tries to build
-                .macos => {
-                    exe.linkFramework("Foundation");
-                    exe.linkFramework("Cocoa");
-                    exe.linkFramework("OpenGL");
-                    exe.linkFramework("CoreAudio");
-                    exe.linkFramework("CoreVideo");
-                    exe.linkFramework("IOKit");
-                },
-                .linux => {
-                    exe.addLibPath("/usr/lib64/");
-                    exe.linkSystemLibrary("GL");
-                    exe.linkSystemLibrary("rt");
-                    exe.linkSystemLibrary("dl");
-                    exe.linkSystemLibrary("m");
-                    exe.linkSystemLibrary("X11");
-                },
-                else => {},
-            }
-
             exe.linkLibC();
             exe.install();
 
@@ -216,6 +195,27 @@ pub fn build(b: *std.build.Builder) !void {
 
             const run_step = b.step("run", "Run the app");
             run_step.dependOn(&run_cmd.step);
+
+            const exeVisualizer = b.addExecutable(APP_NAME ++ "-vis", "src/visualizer.zig");
+            exeVisualizer.setTarget(target);
+            exeVisualizer.setBuildMode(mode);
+            exeVisualizer.pie = true;
+            exeVisualizer.linkLibrary(raylib);
+            exeVisualizer.addIncludeDir(raylibSrc);
+            exeVisualizer.addIncludeDir(raylibSrc ++ "extras/");
+            exeVisualizer.addIncludeDir(bindingSrc);
+            exeVisualizer.addCSourceFile(bindingSrc ++ "marshal.c", &.{});
+            exeVisualizer.linkLibC();
+            exeVisualizer.install();
+
+            const vis_cmd = exeVisualizer.run();
+            vis_cmd.step.dependOn(b.getInstallStep());
+            if (b.args) |args| {
+                vis_cmd.addArgs(args);
+            }
+
+            const vis_step = b.step("visualizer", "Visualize sokoban generation");
+            vis_step.dependOn(&vis_cmd.step);
         },
     }
 }

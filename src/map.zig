@@ -13,11 +13,15 @@ pub const Map = struct {
     workerPos: soko.Pos = undefined,
 
     pub fn init(allocator: Allocator) Map {
-        return Map{
+        var map = Map{
             .alloc = allocator,
             .rows = soko.MapArray.init(allocator),
             .displayed = std.ArrayList(u8).init(allocator),
         };
+
+        // find worker pos
+        map.setWorkerPos();
+        return map;
     }
 
     pub fn deinit(self: *Map) void {
@@ -30,21 +34,20 @@ pub const Map = struct {
 
     // TODO: consider renaming to getDisplayed()
     pub fn buildDisplayed(self: *Map) !void {
-        var result = std.ArrayList(u8).init(self.alloc);
+        self.displayed.clearAndFree();
 
         for (self.rows.items) |row| {
             for (row.items) |item| {
-                try result.append(@enumToInt(item.tex));
+                try self.displayed.append(@enumToInt(item.tex));
             }
             const builtin = @import("builtin");
             if (builtin.os.tag == .wasi) {
-                try result.appendSlice("<br>");
+                try self.displayed.appendSlice("<br>");
             } else {
-                try result.append('\n');
+                try self.displayed.append('\n');
             }
         }
-        self.displayed.deinit();
-        self.displayed = result;
+        try self.displayed.append(0);
     }
 
     pub fn build(self: *Map, givenMap: []u8) !void {
@@ -89,18 +92,40 @@ pub const Map = struct {
         self.rows = result;
     }
 
-    pub fn getBoxPositions(self: *Map) std.ArrayList(.{ u8, soko.Pos }) {
-        var boxPositions = std.ArrayList(soko.Pos).init(self.alloc);
+    pub fn getBoxPositions(self: *Map) !std.AutoArrayHashMap(u8, soko.Pos) {
+        var boxPositions = std.AutoArrayHashMap(u8, soko.Pos).init(self.alloc);
 
         for (self.rows.items) |row, i| {
             for (row.items) |item, j| {
                 switch (item.tex) {
-                    .box => boxPositions.append(soko.Pos{ .x = j, .y = i }),
+                    .box, .boxDocked => try boxPositions.put(item.id, soko.Pos{ .x = j, .y = i }),
                     else => {},
                 }
             }
         }
 
         return boxPositions;
+    }
+
+    pub fn setWorkerPos(self: *Map) void {
+        for (self.rows.items) |row, i| {
+            for (row.items) |item, j| {
+                if (item.tex == .worker) {
+                    self.workerPos = soko.Pos{ .x = j, .y = i };
+                }
+            }
+        }
+    }
+
+    pub fn clone(self: *Map) !*Map {
+        const cloned: *Map = try self.alloc.create(Map);
+        cloned.alloc = self.alloc;
+        cloned.highestId = self.highestId;
+        cloned.sizeHeight = self.sizeHeight;
+        cloned.sizeWidth = self.sizeWidth;
+        cloned.rows = try self.rows.clone();
+        cloned.displayed = try self.displayed.clone();
+        cloned.setWorkerPos();
+        return cloned;
     }
 };
