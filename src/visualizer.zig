@@ -9,15 +9,21 @@ const ZecsiAllocator = @import("allocator.zig").ZecsiAllocator;
 var zalloc = ZecsiAllocator{};
 var alloc = zalloc.allocator();
 
-var levelSize: usize = 5;
-var boxCount: usize = 3;
 var seed: u64 = undefined;
 var rnd: std.rand.Xoshiro256 = undefined;
-var parentNode: *Node = undefined;
 var font: raylib.Font = undefined;
 
 const screenWidth = 800;
 const screenHeight = 600;
+
+const levelSize = 5;
+var boxCount: usize = 3;
+var parentNode: *Node = undefined;
+var parentNodeVis: *NodeVis = undefined;
+
+const fontSize = 14;
+var cardWidth: i32 = ((levelSize + 8) * (fontSize + 1)) + 8;
+var cardHeight: i32 = ((@intCast(i32, levelSize) + 8) * (fontSize)) + 8;
 
 fn init() void {
     std.os.getrandom(std.mem.asBytes(&seed)) catch unreachable;
@@ -74,12 +80,17 @@ pub fn main() !void {
 
     while (!raylib.WindowShouldClose()) {
         raylib.BeginDrawing();
+        raylib.ClearBackground(raylib.BLACK);
+        raylib.DrawFPS(2, 2);
         raylib.BeginMode2D(camera2D);
         defer raylib.EndMode2D();
         defer raylib.EndDrawing();
-        raylib.ClearBackground(raylib.BLACK);
 
-        visualize(parentNode, 0, 0);
+        var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+        parentNodeVis = NodeVis.init(arena.allocator(), parentNode);
+        parentNodeVis.positionTree(0.25, 0.25);
+        drawCard(parentNodeVis, 0);
+        arena.deinit();
 
         // update
         if (raylib.IsMouseButtonPressed(.MOUSE_BUTTON_LEFT) or raylib.IsKeyPressed(.KEY_SPACE))
@@ -107,21 +118,207 @@ pub fn main() !void {
     log.warn("mem leaks: {}", .{zalloc.deinit()}); // TODO IMPL TREE DEINIT
 }
 
-pub fn visualize(node: *Node, nodeNum: usize, nodeChildNum: usize) void {
-    var childNum: usize = 0;
-    for (node.children.items) |child| {
-        visualize(child, nodeNum + 1, childNum);
-        childNum += 1;
-    }
-    log.warn("node: {*}", .{node});
-    const fontSize = 14;
+// Uses John Q. Walker II tree positioning algorithm, article from 1989.
+const unitSize = 2;
+const siblingSeparation = unitSize * 2;
+const levelSeparation: f32 = unitSize * 1;
 
-    var cardWidth: i32 = ((@intCast(i32, levelSize) + 8) * (fontSize + 1)) + 8;
-    var cardHeight: i32 = ((@intCast(i32, levelSize) + 8) * (fontSize)) + 8;
-    var cardX: i32 = 20 + (@intCast(i32, nodeChildNum) * (cardWidth + 15));
-    var cardY: i32 = 20 + (@intCast(i32, nodeNum) * (cardHeight + 15));
+var xTopAdj: f32 = 0;
+var yTopAdj: f32 = 0;
+// all coords values are of multiples of unitSize, which is computed later on
+// the program execution, when actually drawing the card, ref. drawCard()
+const NodeVis = struct {
+    alloc: std.mem.Allocator,
+    absoluteX: f32 = 0,
+    absoluteY: f32 = 0,
+
+    localX: usize = 0,
+    mod: f32 = 0, // cardWidth multiple to offset current card along the X axis
+    prelim: f32 = 0,
+
+    parent: ?*NodeVis,
+    children: std.ArrayList(*NodeVis),
+    node: *Node,
+
+    pub fn init(selfAlloc: std.mem.Allocator, tree: *Node) *@This() {
+        var parent = NodeVis.initNode(selfAlloc, tree, null);
+        parent.initializeLocalX(0);
+        return parent;
+    }
+
+    pub fn positionTree(self: *NodeVis, rootX: f32, rootY: f32) void {
+        self.firstWalk(0);
+
+        xTopAdj = rootX - self.prelim;
+        yTopAdj = rootY;
+        log.warn("hello", .{});
+
+        self.secondWalk(0, 0);
+    }
+
+    fn initializeLocalX(self: *NodeVis, childNum: usize) void {
+        var localChildNum: usize = 0;
+        for (self.children.items) |child| {
+            child.initializeLocalX(localChildNum);
+            localChildNum += 1;
+        }
+        self.localX = childNum;
+    }
+
+    fn firstWalk(self: *NodeVis, level: usize) void {
+        if (self.children.items.len == 0) {
+            if (self.localX != 0) {
+                if (self.parent) |parent| {
+                    self.prelim =
+                        parent.children.items[self.localX - 1].prelim +
+                        siblingSeparation +
+                        unitSize; // mean node -> (unitSize * 2) / 2
+                }
+            }
+        } else {
+            for (self.children.items) |child|
+                child.firstWalk(level + 1);
+
+            var midPoint = (self.children.items[0].prelim + self.children.items[self.children.items.len - 1].prelim) / 2;
+            if (self.localX != 0) {
+                if (self.parent) |parent| {
+                    self.prelim =
+                        parent.children.items[self.localX - 1].prelim +
+                        siblingSeparation +
+                        unitSize; // mean node -> (unitSize * 2) / 2
+                    self.mod = self.prelim - midPoint;
+                    self.apportion(level);
+                }
+            } else {
+                self.prelim = midPoint;
+            }
+        }
+    }
+
+    fn secondWalk(self: *NodeVis, level: usize, modSum: f32) void {
+        var xTemp = xTopAdj + self.prelim + modSum;
+        var yTemp = yTopAdj + (@intToFloat(f32, level) * levelSeparation);
+
+        self.absoluteX = xTemp;
+        self.absoluteY = yTemp;
+
+        if (self.children.items.len != 0) {
+            self.children.items[0].secondWalk(level + 1, modSum + self.mod);
+            log.warn("hello 2", .{});
+        }
+
+        if (self.parent) |parent| {
+            if (self.localX < parent.children.items.len - 1) {
+                log.warn("{*}", .{parent.children.items});
+                parent.children.items[self.localX + 1].secondWalk(level + 1, modSum);
+            }
+        }
+    }
+
+    fn apportion(self: *NodeVis, level: usize) void {
+        _ = level;
+        if (self.children.items.len == 0) return;
+
+        var leftMost: *NodeVis = self.children.items[0];
+        var neighbor: *NodeVis = leftMost;
+
+        while (leftMost.children.items.len != 0) {
+            var leftModSum: f32 = 0;
+            var rightModSum: f32 = 0;
+            var ancestorLeftMost = leftMost;
+            var ancestorNeighbor = neighbor;
+
+            while (ancestorLeftMost.parent) |leftParent| {
+                ancestorLeftMost = leftParent;
+                ancestorNeighbor = ancestorNeighbor.parent orelse unreachable;
+                rightModSum += ancestorLeftMost.mod;
+                leftModSum += ancestorNeighbor.mod;
+            }
+
+            var moveDistance =
+                neighbor.prelim +
+                leftModSum +
+                unitSize -
+                (leftMost.prelim + rightModSum);
+
+            if (moveDistance > 0) {
+                // count interior sibling subtrees in leftSiblings (diff than
+                // article, here localX property is used)
+                var tempPtr: *NodeVis = self;
+                var leftSiblings: usize = 0;
+                while (tempPtr.localX != 0) {
+                    leftSiblings += 1;
+                    if (tempPtr.parent) |parent| {
+                        tempPtr = parent.children.items[tempPtr.localX - 1];
+                    }
+                }
+
+                if (leftSiblings != 0) {
+                    var portion = moveDistance / @intToFloat(f32, leftSiblings);
+                    tempPtr = self;
+                    while (tempPtr.localX != 0) {
+                        tempPtr.*.prelim += moveDistance;
+                        tempPtr.*.mod += moveDistance;
+                        moveDistance -= portion;
+                    }
+                } else {
+                    return;
+                }
+            }
+
+            if (leftMost.children.items.len == 0) {} else {
+                leftMost = leftMost.children.items[0];
+            }
+        }
+    }
+
+    // deinit with arena allocator
+    fn initNode(selfAlloc: std.mem.Allocator, tree: *Node, parent: ?*NodeVis) *@This() {
+        var nodeVis = NodeVis{
+            .alloc = selfAlloc,
+            .node = tree,
+            .parent = parent,
+            .children = std.ArrayList(*NodeVis).init(selfAlloc),
+        };
+        var allocNodeVis: *NodeVis = alloc.create(NodeVis) catch unreachable;
+        allocNodeVis.* = nodeVis;
+        allocNodeVis.initNodes(tree);
+        return allocNodeVis;
+    }
+
+    pub fn appendChild(self: *NodeVis, node: *Node) !void {
+        var newNode = NodeVis.initNode(self.alloc, node, self);
+        try self.children.append(newNode);
+    }
+
+    fn initNodes(self: *@This(), node: *Node) void {
+        for (node.children.items) |child| {
+            self.appendChild(child) catch unreachable;
+            // self.children.items[self.children.items.len - 1].initNodes(child); // already called by appendChild
+        }
+        //self.node = node;
+    }
+};
+
+pub fn drawCard(nodeVis: *NodeVis, nodeNum: usize) void {
+    var node = nodeVis.node.*;
+
+    for (nodeVis.children.items) |child|
+        drawCard(child, nodeNum + 1);
+
+    var cardX: i32 = @floatToInt(i32, (nodeVis.absoluteX / 2) * @intToFloat(f32, cardWidth));
+    var cardY: i32 = @floatToInt(i32, (nodeVis.absoluteY / 2) * @intToFloat(f32, cardHeight));
     var cardXCenter: i32 = cardX + @divFloor(cardWidth, 2);
     var currentYProgress: i32 = cardY + 3;
+
+    // link this node with our parent
+    if (nodeVis.parent) |parent| {
+        var parentCardX: i32 = @floatToInt(i32, (parent.absoluteX / 2) * @intToFloat(f32, cardWidth));
+        var parentCardY: i32 = @floatToInt(i32, (parent.absoluteY / 2) * @intToFloat(f32, cardHeight));
+        var parentCardXCenter: i32 = parentCardX + @divFloor(cardWidth, 2);
+        var parentCardYBottom: i32 = parentCardY + cardHeight;
+        raylib.DrawLine(cardXCenter, cardY, parentCardXCenter, parentCardYBottom, raylib.BLUE);
+    }
 
     var rectLine = raylib.Rectangle{
         .x = @intToFloat(f32, cardX),
@@ -153,7 +350,7 @@ pub fn visualize(node: *Node, nodeNum: usize, nodeChildNum: usize) void {
     var map = std.ArrayList(u8).init(std.heap.c_allocator);
     defer map.deinit();
     node.map.buildDisplayed() catch unreachable;
-    log.warn("node: {d}\n{s}\n{*}", .{ nodeNum, node.map.displayed.items, node.map.displayed.items });
+    //log.warn("node: {d}\n{s}\n{*}", .{ nodeNum, node.map.displayed.items, node.map.displayed.items });
     map.appendSlice(node.map.displayed.items) catch unreachable;
     map.append(0) catch unreachable;
     var mapText = @ptrCast([*:0]const u8, map.items);

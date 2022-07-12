@@ -123,7 +123,10 @@ pub const Map = struct {
         cloned.highestId = self.highestId;
         cloned.sizeHeight = self.sizeHeight;
         cloned.sizeWidth = self.sizeWidth;
-        cloned.rows = try self.rows.clone();
+        cloned.rows = soko.MapArray.init(self.alloc); // contains rows
+        for (self.rows.items) |*row| {
+            try cloned.rows.append(try row.clone());
+        }
         cloned.displayed = try self.displayed.clone();
         cloned.setWorkerPos();
         return cloned;

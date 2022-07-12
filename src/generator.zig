@@ -301,6 +301,8 @@ pub const Node = struct {
             }
         }
 
+        if (floorTiles.items.len == 0) return;
+
         // convert random floor item to box
         var randomNumber = rnd.random().intRangeAtMost(usize, 0, floorTiles.items.len - 1);
         var x = floorTiles.items[randomNumber].x;
