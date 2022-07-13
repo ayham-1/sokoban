@@ -3,6 +3,7 @@ const log = @import("log.zig");
 const raylib = @import("./raylib/raylib.zig");
 const soko = @import("constants.zig");
 const Node = @import("generator.zig").Node;
+const NodeActionSet = @import("generator.zig").NodeActionSet;
 const Map = @import("map.zig").Map;
 
 const ZecsiAllocator = @import("allocator.zig").ZecsiAllocator;
@@ -13,7 +14,7 @@ var seed: u64 = undefined;
 var rnd: std.rand.Xoshiro256 = undefined;
 var font: raylib.Font = undefined;
 
-const screenWidth = 800;
+const screenWidth = 1000;
 const screenHeight = 600;
 
 const levelSize = 5;
@@ -66,8 +67,9 @@ pub fn main() !void {
     raylib.SetConfigFlags(.FLAG_WINDOW_RESIZABLE);
     raylib.SetTargetFPS(60);
 
-    font = raylib.LoadFont("assets/font.otf");
-    defer raylib.UnloadFont(font);
+    //font = raylib.LoadFont("assets/font.ttf");
+    //defer raylib.UnloadFont(font);
+    font = raylib.GetFontDefault();
 
     var camera2D = raylib.Camera2D{
         .offset = raylib.Vector2.zero(),
@@ -76,52 +78,76 @@ pub fn main() !void {
         .zoom = 1.0,
     };
 
+    var prevMousePos: raylib.Vector2 = raylib.GetMousePosition();
+
     defer raylib.CloseWindow();
 
     while (!raylib.WindowShouldClose()) {
-        raylib.BeginDrawing();
-        raylib.ClearBackground(raylib.BLACK);
-        raylib.DrawFPS(2, 2);
-        raylib.BeginMode2D(camera2D);
-        defer raylib.EndMode2D();
-        defer raylib.EndDrawing();
+        // draw
+        {
+            raylib.BeginDrawing();
+            raylib.ClearBackground(raylib.BLACK);
+            raylib.DrawFPS(2, 2);
+            raylib.BeginMode2D(camera2D);
+            defer raylib.EndMode2D();
+            defer raylib.EndDrawing();
 
-        var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-        parentNodeVis = NodeVis.init(arena.allocator(), parentNode);
-        parentNodeVis.positionTree(0.25, 0.25);
-        drawCard(parentNodeVis, 0);
-        arena.deinit();
+            var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+            parentNodeVis = NodeVis.init(arena.allocator(), parentNode);
+            parentNodeVis.positionTree(0.25, 0.25);
+            drawCard(parentNodeVis, 0);
+            arena.deinit();
+        }
 
         // update
-        if (raylib.IsMouseButtonPressed(.MOUSE_BUTTON_LEFT) or raylib.IsKeyPressed(.KEY_SPACE))
-            parentNode.iterate() catch unreachable;
+        {
+            var mouseWheelDelta = raylib.GetMouseWheelMove();
+            var newZoom = camera2D.zoom + mouseWheelDelta * 0.05;
+            if (newZoom <= 0)
+                newZoom = 0.01;
+            camera2D.zoom = newZoom;
 
-        if (raylib.IsKeyDown(.KEY_Z))
-            camera2D.zoom += 0.01;
-        if (raylib.IsKeyDown(.KEY_X))
-            camera2D.zoom -= 0.01;
+            var mousePos = raylib.GetMousePosition();
+            var delta = raylib.Vector2Subtract(prevMousePos, mousePos);
+            prevMousePos = mousePos;
 
-        if (raylib.IsKeyDown(.KEY_A))
-            camera2D.offset.x += 10;
-        if (raylib.IsKeyDown(.KEY_D))
-            camera2D.offset.x -= 10;
-        if (raylib.IsKeyDown(.KEY_W))
-            camera2D.offset.y += 10;
-        if (raylib.IsKeyDown(.KEY_S))
-            camera2D.offset.y -= 10;
-        if (raylib.IsKeyPressed(.KEY_R)) {
-            camera2D.offset.setZero();
-            camera2D.zoom = 1.0;
+            if (raylib.IsMouseButtonDown(.MOUSE_BUTTON_LEFT))
+                camera2D.target = raylib.GetScreenToWorld2D(raylib.Vector2Add(camera2D.offset, delta), camera2D);
+
+            if (raylib.IsKeyPressed(.KEY_SPACE))
+                parentNode.iterate() catch unreachable;
+
+            if (raylib.IsKeyDown(.KEY_Z))
+                camera2D.zoom += 0.01;
+            if (raylib.IsKeyDown(.KEY_X))
+                camera2D.zoom -= 0.01;
+
+            if (raylib.IsKeyDown(.KEY_A))
+                camera2D.offset.x += 10;
+            if (raylib.IsKeyDown(.KEY_D))
+                camera2D.offset.x -= 10;
+            if (raylib.IsKeyDown(.KEY_W))
+                camera2D.offset.y += 10;
+            if (raylib.IsKeyDown(.KEY_S))
+                camera2D.offset.y -= 10;
+            if (raylib.IsKeyPressed(.KEY_R)) {
+                camera2D.offset.setZero();
+                camera2D.zoom = 1.0;
+            }
         }
     }
 
-    log.warn("mem leaks: {}", .{zalloc.deinit()}); // TODO IMPL TREE DEINIT
+    //log.warn("mem leaks: {}", .{zalloc.deinit()}); // TODO IMPL TREE DEINIT
 }
 
 // Uses John Q. Walker II tree positioning algorithm, article from 1989.
 const unitSize = 2;
 const siblingSeparation = unitSize * 2;
-const levelSeparation: f32 = unitSize * 1;
+const subTreeSeparation = siblingSeparation * 1.5;
+const levelSeparation: f32 = unitSize * 1.5;
+
+var prevNodeAlloc = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+var prevNodeList = std.AutoArrayHashMap(usize, *NodeVis).init(prevNodeAlloc.allocator());
 
 var xTopAdj: f32 = 0;
 var yTopAdj: f32 = 0;
@@ -139,6 +165,7 @@ const NodeVis = struct {
     parent: ?*NodeVis,
     children: std.ArrayList(*NodeVis),
     node: *Node,
+    leftNeighbor: ?*NodeVis = null,
 
     pub fn init(selfAlloc: std.mem.Allocator, tree: *Node) *@This() {
         var parent = NodeVis.initNode(selfAlloc, tree, null);
@@ -147,11 +174,11 @@ const NodeVis = struct {
     }
 
     pub fn positionTree(self: *NodeVis, rootX: f32, rootY: f32) void {
+        prevNodeList.clearAndFree();
         self.firstWalk(0);
 
         xTopAdj = rootX - self.prelim;
         yTopAdj = rootY;
-        log.warn("hello", .{});
 
         self.secondWalk(0, 0);
     }
@@ -166,6 +193,10 @@ const NodeVis = struct {
     }
 
     fn firstWalk(self: *NodeVis, level: usize) void {
+        self.leftNeighbor = prevNodeList.get(level) orelse null;
+        prevNodeList.put(level, self) catch unreachable;
+        self.mod = 0;
+
         if (self.children.items.len == 0) {
             if (self.localX != 0) {
                 if (self.parent) |parent| {
@@ -173,6 +204,8 @@ const NodeVis = struct {
                         parent.children.items[self.localX - 1].prelim +
                         siblingSeparation +
                         unitSize; // mean node -> (unitSize * 2) / 2
+                } else {
+                    unreachable;
                 }
             }
         } else {
@@ -187,7 +220,7 @@ const NodeVis = struct {
                         siblingSeparation +
                         unitSize; // mean node -> (unitSize * 2) / 2
                     self.mod = self.prelim - midPoint;
-                    self.apportion(level);
+                    self.apportion();
                 }
             } else {
                 self.prelim = midPoint;
@@ -202,72 +235,107 @@ const NodeVis = struct {
         self.absoluteX = xTemp;
         self.absoluteY = yTemp;
 
-        if (self.children.items.len != 0) {
+        if (self.children.items.len != 0)
             self.children.items[0].secondWalk(level + 1, modSum + self.mod);
-            log.warn("hello 2", .{});
-        }
 
-        if (self.parent) |parent| {
-            if (self.localX < parent.children.items.len - 1) {
-                log.warn("{*}", .{parent.children.items});
-                parent.children.items[self.localX + 1].secondWalk(level + 1, modSum);
+        if (self.parent) |parent|
+            if (self.localX < parent.children.items.len - 1)
+                parent.children.items[self.localX + 1].secondWalk(level, modSum);
+    }
+
+    fn getLeftMost(self: *NodeVis, depth: usize) ?*NodeVis {
+        log.warn("hhell", .{});
+        if (depth <= 0) {
+            return self;
+        } else if (self.children.items.len == 0) {
+            return null;
+        } else {
+            var rightMost = self.children.items[0];
+            var leftMost = rightMost.getLeftMost(depth - 1);
+            while (leftMost) |_| {
+                rightMost = rightMost.children.items[rightMost.children.items.len - 1];
+                leftMost = rightMost.getLeftMost(depth - 1);
             }
+            return leftMost;
         }
     }
 
-    fn apportion(self: *NodeVis, level: usize) void {
-        _ = level;
+    fn apportion(self: *NodeVis) void {
         if (self.children.items.len == 0) return;
 
-        var leftMost: *NodeVis = self.children.items[0];
-        var neighbor: *NodeVis = leftMost;
+        var leftMostG: ?*NodeVis = self.children.items[0];
+        var neighborG: ?*NodeVis = if (leftMostG) |leftMost| leftMost.leftNeighbor orelse null else unreachable;
 
-        while (leftMost.children.items.len != 0) {
-            var leftModSum: f32 = 0;
-            var rightModSum: f32 = 0;
-            var ancestorLeftMost = leftMost;
-            var ancestorNeighbor = neighbor;
+        var compareDepth: usize = 1;
+        while (leftMostG) |leftMost| {
+            if (neighborG) |neighbor| {
+                var leftModSum: f32 = 0;
+                var rightModSum: f32 = 0;
+                var ancestorLeftMost = leftMost;
+                var ancestorNeighbor = neighbor;
 
-            while (ancestorLeftMost.parent) |leftParent| {
-                ancestorLeftMost = leftParent;
-                ancestorNeighbor = ancestorNeighbor.parent orelse unreachable;
-                rightModSum += ancestorLeftMost.mod;
-                leftModSum += ancestorNeighbor.mod;
-            }
+                var i: usize = 0;
+                while (i < compareDepth) {
+                    defer i += 1;
+                    ancestorLeftMost = if (ancestorLeftMost.parent) |parent| parent else break;
+                    ancestorNeighbor = if (ancestorNeighbor.parent) |parent| parent else break;
+                    rightModSum += ancestorLeftMost.mod;
+                    leftModSum += ancestorNeighbor.mod;
+                }
 
-            var moveDistance =
-                neighbor.prelim +
-                leftModSum +
-                unitSize -
-                (leftMost.prelim + rightModSum);
+                var moveDistance =
+                    neighbor.prelim +
+                    leftModSum +
+                    subTreeSeparation -
+                    (leftMost.prelim + rightModSum);
 
-            if (moveDistance > 0) {
-                // count interior sibling subtrees in leftSiblings (diff than
-                // article, here localX property is used)
-                var tempPtr: *NodeVis = self;
-                var leftSiblings: usize = 0;
-                while (tempPtr.localX != 0) {
-                    leftSiblings += 1;
-                    if (tempPtr.parent) |parent| {
-                        tempPtr = parent.children.items[tempPtr.localX - 1];
+                if (moveDistance > 0) {
+                    // count interior sibling subtrees in leftSiblings (diff than
+                    // article, here localX property is used)
+                    var tempPtr: ?*NodeVis = self;
+                    var leftSiblings: usize = 0;
+                    while (tempPtr != null and tempPtr != ancestorNeighbor) {
+                        leftSiblings += 1;
+                        tempPtr =
+                            if (tempPtr.?.parent) |parent|
+                            if (tempPtr.?.localX != 0)
+                                parent.children.items[tempPtr.?.localX - 1]
+                            else
+                                null
+                        else
+                            null;
+                    }
+
+                    if (tempPtr != null) { // check
+                        var portion = moveDistance / @intToFloat(f32, leftSiblings);
+                        tempPtr = self;
+                        while (tempPtr != null and tempPtr != ancestorNeighbor) {
+                            tempPtr.?.*.prelim += moveDistance;
+                            tempPtr.?.*.mod += moveDistance;
+                            moveDistance -= portion;
+                            tempPtr =
+                                if (tempPtr.?.parent) |parent|
+                                if (tempPtr.?.localX != 0)
+                                    parent.children.items[tempPtr.?.localX - 1]
+                                else
+                                    null
+                            else
+                                null;
+                        }
+                    } else {
+                        return;
                     }
                 }
 
-                if (leftSiblings != 0) {
-                    var portion = moveDistance / @intToFloat(f32, leftSiblings);
-                    tempPtr = self;
-                    while (tempPtr.localX != 0) {
-                        tempPtr.*.prelim += moveDistance;
-                        tempPtr.*.mod += moveDistance;
-                        moveDistance -= portion;
-                    }
+                compareDepth += 1;
+                log.warn("helllllll", .{});
+                if (leftMost.children.items.len == 0) {
+                    leftMostG = self.getLeftMost(compareDepth);
                 } else {
-                    return;
+                    leftMostG = leftMost.children.items[0];
                 }
-            }
-
-            if (leftMost.children.items.len == 0) {} else {
-                leftMost = leftMost.children.items[0];
+            } else {
+                break;
             }
         }
     }
@@ -292,11 +360,8 @@ const NodeVis = struct {
     }
 
     fn initNodes(self: *@This(), node: *Node) void {
-        for (node.children.items) |child| {
+        for (node.children.items) |child|
             self.appendChild(child) catch unreachable;
-            // self.children.items[self.children.items.len - 1].initNodes(child); // already called by appendChild
-        }
-        //self.node = node;
     }
 };
 
@@ -409,7 +474,14 @@ pub fn drawCard(nodeVis: *NodeVis, nodeNum: usize) void {
     var action = std.ArrayList(u8).init(std.heap.c_allocator);
     defer action.deinit();
     action.appendSlice("self.action = ") catch unreachable;
-    action.appendSlice(std.fmt.allocPrint(std.heap.c_allocator, "{}", .{@enumToInt(node.action)}) catch unreachable) catch unreachable;
+    switch (node.action) {
+        .root => action.appendSlice("rootNode") catch unreachable,
+        .deleteWall => action.appendSlice("deleteWall") catch unreachable,
+        .placeBox => action.appendSlice("placeBox") catch unreachable,
+        .freezeLevel => action.appendSlice("freezeLevel") catch unreachable,
+        .moveAgent => action.appendSlice("moveAgent") catch unreachable,
+        .finalizeLevel => action.appendSlice("finalizeLevel") catch unreachable,
+    }
     action.append(0) catch unreachable;
     var actionText = @ptrCast([*:0]const u8, action.items);
     var actionX = cardXCenter - @floatToInt(i32, @divFloor(raylib.MeasureTextEx(font, actionText, fontSize, 2).x, 2));
