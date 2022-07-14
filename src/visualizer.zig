@@ -22,7 +22,7 @@ var boxCount: usize = 3;
 var parentNode: *Node = undefined;
 var parentNodeVis: *NodeVis = undefined;
 
-const fontSize = 14;
+const fontSize = 24;
 var cardWidth: i32 = ((levelSize + 8) * (fontSize + 1)) + 8;
 var cardHeight: i32 = ((@intCast(i32, levelSize) + 8) * (fontSize)) + 8;
 
@@ -143,7 +143,7 @@ pub fn main() !void {
 // Uses John Q. Walker II tree positioning algorithm, article from 1989.
 const unitSize = 2;
 const siblingSeparation = unitSize * 2;
-const subTreeSeparation = siblingSeparation * 1.5;
+const subTreeSeparation = siblingSeparation * 1.2;
 const levelSeparation: f32 = unitSize * 1.5;
 
 var prevNodeAlloc = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -207,21 +207,27 @@ const NodeVis = struct {
                 } else {
                     unreachable;
                 }
+            } else {
+                self.prelim = 0;
             }
         } else {
-            for (self.children.items) |child|
-                child.firstWalk(level + 1);
+            var leftMost: *NodeVis = self.children.items[0];
+            leftMost.firstWalk(level + 1);
 
-            var midPoint = (self.children.items[0].prelim + self.children.items[self.children.items.len - 1].prelim) / 2;
+            var rightMost: *NodeVis = self.children.items[0];
+            while (rightMost.hasRightSibling()) {
+                rightMost = rightMost.parent.?.children.items[rightMost.localX + 1];
+                rightMost.firstWalk(level + 1);
+            }
+
+            var midPoint = (leftMost.prelim + rightMost.prelim) / 2;
             if (self.localX != 0) {
-                if (self.parent) |parent| {
-                    self.prelim =
-                        parent.children.items[self.localX - 1].prelim +
-                        siblingSeparation +
-                        unitSize; // mean node -> (unitSize * 2) / 2
-                    self.mod = self.prelim - midPoint;
-                    self.apportion();
-                }
+                self.prelim =
+                    self.parent.?.children.items[self.localX - 1].prelim +
+                    siblingSeparation +
+                    unitSize; // mean node -> (unitSize * 2) / 2
+                self.mod = self.prelim - midPoint;
+                self.apportion(level);
             } else {
                 self.prelim = midPoint;
             }
@@ -238,106 +244,100 @@ const NodeVis = struct {
         if (self.children.items.len != 0)
             self.children.items[0].secondWalk(level + 1, modSum + self.mod);
 
-        if (self.parent) |parent|
-            if (self.localX < parent.children.items.len - 1)
-                parent.children.items[self.localX + 1].secondWalk(level, modSum);
+        if (self.hasRightSibling())
+            self.parent.?.children.items[self.localX + 1].secondWalk(level, modSum);
     }
 
-    fn getLeftMost(self: *NodeVis, depth: usize) ?*NodeVis {
-        log.warn("hhell", .{});
-        if (depth <= 0) {
+    fn apportion(self: *NodeVis, level: usize) void {
+        var leftMost: ?*NodeVis = self.children.items[0];
+        var neighbor: ?*NodeVis = leftMost.?.leftNeighbor orelse prevNodeList.get(level + 1) orelse null;
+
+        var compareDepth: usize = 1;
+        while (leftMost != null and neighbor != null) {
+            var leftModSum: f32 = 0;
+            var rightModSum: f32 = 0;
+            var ancestorLeftMost = leftMost;
+            var ancestorNeighbor = neighbor;
+
+            var i: usize = 0;
+            while (i < compareDepth) {
+                defer i += 1;
+                ancestorLeftMost = ancestorLeftMost.?.parent.?;
+                ancestorNeighbor = ancestorNeighbor.?.parent.?;
+                rightModSum += ancestorLeftMost.?.mod;
+                leftModSum += ancestorNeighbor.?.mod;
+            }
+
+            var moveDistance: f32 =
+                neighbor.?.prelim +
+                leftModSum +
+                subTreeSeparation +
+                unitSize -
+                (leftMost.?.prelim + rightModSum);
+
+            if (moveDistance > 0) {
+                // count interior sibling subtrees in leftSiblings (diff than
+                // article, here localX property is used)
+                var tempPtr: ?*NodeVis = self;
+                var leftSiblings: usize = 0;
+                while (tempPtr != null and tempPtr != ancestorNeighbor) {
+                    leftSiblings += 1;
+                    tempPtr = if (tempPtr.?.localX != 0)
+                        tempPtr.?.parent.?.children.items[tempPtr.?.localX - 1]
+                    else
+                        null;
+                }
+
+                if (tempPtr != null) { // check
+                    var portion = moveDistance / @intToFloat(f32, leftSiblings);
+                    tempPtr = self;
+                    while (tempPtr != null and tempPtr != ancestorNeighbor) {
+                        tempPtr.?.*.prelim += moveDistance;
+                        tempPtr.?.*.mod += moveDistance;
+                        moveDistance -= portion;
+                        tempPtr = if (tempPtr.?.localX != 0)
+                            tempPtr.?.parent.?.children.items[tempPtr.?.localX - 1]
+                        else
+                            null;
+                    }
+                } else {
+                    return;
+                }
+            }
+
+            compareDepth += 1;
+            if (leftMost.?.children.items.len == 0) {
+                leftMost = self.getLeftMost(0, compareDepth);
+            } else {
+                leftMost = leftMost.?.children.items[0];
+            }
+            if (leftMost != null) {
+                neighbor = leftMost.?.leftNeighbor;
+            }
+        }
+    }
+
+    fn getLeftMost(self: *NodeVis, level: usize, depth: usize) ?*NodeVis {
+        if (level >= depth) {
             return self;
         } else if (self.children.items.len == 0) {
             return null;
         } else {
             var rightMost = self.children.items[0];
-            var leftMost = rightMost.getLeftMost(depth - 1);
-            while (leftMost) |_| {
-                rightMost = rightMost.children.items[rightMost.children.items.len - 1];
-                leftMost = rightMost.getLeftMost(depth - 1);
+            var leftMost = rightMost.getLeftMost(level + 1, depth);
+            while (leftMost == null and rightMost.hasRightSibling()) {
+                rightMost = rightMost.parent.?.children.items[rightMost.localX + 1];
+                leftMost = rightMost.getLeftMost(level + 1, depth);
             }
             return leftMost;
         }
     }
 
-    fn apportion(self: *NodeVis) void {
-        if (self.children.items.len == 0) return;
-
-        var leftMostG: ?*NodeVis = self.children.items[0];
-        var neighborG: ?*NodeVis = if (leftMostG) |leftMost| leftMost.leftNeighbor orelse null else unreachable;
-
-        var compareDepth: usize = 1;
-        while (leftMostG) |leftMost| {
-            if (neighborG) |neighbor| {
-                var leftModSum: f32 = 0;
-                var rightModSum: f32 = 0;
-                var ancestorLeftMost = leftMost;
-                var ancestorNeighbor = neighbor;
-
-                var i: usize = 0;
-                while (i < compareDepth) {
-                    defer i += 1;
-                    ancestorLeftMost = if (ancestorLeftMost.parent) |parent| parent else break;
-                    ancestorNeighbor = if (ancestorNeighbor.parent) |parent| parent else break;
-                    rightModSum += ancestorLeftMost.mod;
-                    leftModSum += ancestorNeighbor.mod;
-                }
-
-                var moveDistance =
-                    neighbor.prelim +
-                    leftModSum +
-                    subTreeSeparation -
-                    (leftMost.prelim + rightModSum);
-
-                if (moveDistance > 0) {
-                    // count interior sibling subtrees in leftSiblings (diff than
-                    // article, here localX property is used)
-                    var tempPtr: ?*NodeVis = self;
-                    var leftSiblings: usize = 0;
-                    while (tempPtr != null and tempPtr != ancestorNeighbor) {
-                        leftSiblings += 1;
-                        tempPtr =
-                            if (tempPtr.?.parent) |parent|
-                            if (tempPtr.?.localX != 0)
-                                parent.children.items[tempPtr.?.localX - 1]
-                            else
-                                null
-                        else
-                            null;
-                    }
-
-                    if (tempPtr != null) { // check
-                        var portion = moveDistance / @intToFloat(f32, leftSiblings);
-                        tempPtr = self;
-                        while (tempPtr != null and tempPtr != ancestorNeighbor) {
-                            tempPtr.?.*.prelim += moveDistance;
-                            tempPtr.?.*.mod += moveDistance;
-                            moveDistance -= portion;
-                            tempPtr =
-                                if (tempPtr.?.parent) |parent|
-                                if (tempPtr.?.localX != 0)
-                                    parent.children.items[tempPtr.?.localX - 1]
-                                else
-                                    null
-                            else
-                                null;
-                        }
-                    } else {
-                        return;
-                    }
-                }
-
-                compareDepth += 1;
-                log.warn("helllllll", .{});
-                if (leftMost.children.items.len == 0) {
-                    leftMostG = self.getLeftMost(compareDepth);
-                } else {
-                    leftMostG = leftMost.children.items[0];
-                }
-            } else {
-                break;
-            }
-        }
+    fn hasRightSibling(self: *NodeVis) bool {
+        if (self.parent) |parent|
+            if (self.localX + 1 < parent.children.items.len)
+                return true;
+        return false;
     }
 
     // deinit with arena allocator
@@ -369,7 +369,7 @@ pub fn drawCard(nodeVis: *NodeVis, nodeNum: usize) void {
     var node = nodeVis.node.*;
 
     for (nodeVis.children.items) |child|
-        drawCard(child, nodeNum + 1);
+        drawCard(child, child.localX);
 
     var cardX: i32 = @floatToInt(i32, (nodeVis.absoluteX / 2) * @intToFloat(f32, cardWidth));
     var cardY: i32 = @floatToInt(i32, (nodeVis.absoluteY / 2) * @intToFloat(f32, cardHeight));

@@ -228,15 +228,16 @@ pub const Node = struct {
             try self.children.items[self.children.items.len - 1].moveAgent();
 
             if (self.isFinalizable) {
-                //try self.children.append(Node.initAsFreezedChild(self.alloc, self.map.clone(), self));
-                //try self.children.items[self.children.items.len - 1].finalizeLevel();
-                var finalized = Node.initAsParent(self.alloc, self.map, self.boxesLeftToPlace);
-                finalized.*.parent = self;
-                finalized.*.boxGoal = try self.boxGoal.clone();
-                finalized.*.freezedMap = try self.freezedMap.clone();
-                finalized.*.obstacleFirstTime = self.obstacleFirstTime;
-                try finalized.finalizeLevel();
-                self.isFinalizable = false;
+                try self.appendFreezedChild(self.map);
+                try self.children.items[self.children.items.len - 1].finalizeLevel();
+                //var finalized = Node.initAsParent(self.alloc, self.map, self.boxesLeftToPlace);
+                //finalized.*.parent = self;
+                //finalized.*.boxGoal = try self.boxGoal.clone();
+                //finalized.*.freezedMap = try self.freezedMap.clone();
+                //finalized.*.obstacleFirstTime = self.obstacleFirstTime;
+                //finalized.*.action = NodeActionSet.finalizeLevel;
+                //try finalized.finalizeLevel();
+                //self.isFinalizable = false;
             }
         }
     }
