@@ -178,7 +178,7 @@ pub const Node = struct {
         self.totalEvaluation += score;
         var currentNode: *Node = self;
         while (currentNode.*.parent) |node| {
-            //node.*.visits += 1;
+            node.*.visits += 1;
             node.*.totalEvaluation += score;
 
             currentNode = currentNode.parent orelse unreachable;
@@ -357,6 +357,8 @@ pub const Node = struct {
     /// save current box locations as goal locations
     /// inform root node of generated puzzle + score
     pub fn finalizeLevel(self: *Node) !void {
+        if (self.parent == null) return;
+        self.isFinalizable = false;
         self.action = NodeActionSet.finalizeLevel;
         // set current box positions as dock boxes
         // and

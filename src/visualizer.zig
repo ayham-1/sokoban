@@ -22,9 +22,7 @@ var boxCount: usize = 3;
 var parentNode: *Node = undefined;
 var parentNodeVis: *NodeVis = undefined;
 
-const fontSize = 24;
-var cardWidth: i32 = ((levelSize + 8) * (fontSize + 1)) + 8;
-var cardHeight: i32 = ((@intCast(i32, levelSize) + 8) * (fontSize)) + 8;
+var fontSize: f32 = 14;
 
 fn init() void {
     std.os.getrandom(std.mem.asBytes(&seed)) catch unreachable;
@@ -63,6 +61,13 @@ fn init() void {
 
 pub fn main() !void {
     init();
+    if (std.os.argv.len > 1) {
+        var iterateTimes: usize = try std.fmt.parseInt(usize, try std.fmt.allocPrint(alloc, "{s}", .{std.os.argv[1]}), 10);
+        while (iterateTimes > 0) {
+            try parentNode.iterate();
+            iterateTimes -= 1;
+        }
+    }
     raylib.InitWindow(screenWidth, screenHeight, "Sokoban Puzzle Generator Visualizer");
     raylib.SetConfigFlags(.FLAG_WINDOW_RESIZABLE);
     raylib.SetTargetFPS(60);
@@ -137,7 +142,7 @@ pub fn main() !void {
         }
     }
 
-    //log.warn("mem leaks: {}", .{zalloc.deinit()}); // TODO IMPL TREE DEINIT
+    log.warn("mem leaks: {}", .{zalloc.deinit()}); // TODO IMPL TREE DEINIT
 }
 
 // Uses John Q. Walker II tree positioning algorithm, article from 1989.
@@ -365,7 +370,10 @@ const NodeVis = struct {
     }
 };
 
+var highestEval: f32 = 0;
 pub fn drawCard(nodeVis: *NodeVis, nodeNum: usize) void {
+    var cardWidth: i32 = ((levelSize + 8) * (@floatToInt(i32, fontSize) + 1)) + 8;
+    var cardHeight: i32 = ((@intCast(i32, levelSize) + 8) * (@floatToInt(i32, fontSize))) + 8;
     var node = nodeVis.node.*;
 
     for (nodeVis.children.items) |child|
@@ -385,13 +393,22 @@ pub fn drawCard(nodeVis: *NodeVis, nodeNum: usize) void {
         raylib.DrawLine(cardXCenter, cardY, parentCardXCenter, parentCardYBottom, raylib.BLUE);
     }
 
+    // Draw Card outlines
     var rectLine = raylib.Rectangle{
         .x = @intToFloat(f32, cardX),
         .y = @intToFloat(f32, cardY),
         .width = @intToFloat(f32, cardWidth),
         .height = @intToFloat(f32, cardHeight),
     };
-    raylib.DrawRectangleLinesEx(rectLine, 3, raylib.WHITE);
+    if (node.parent != null and node.totalEvaluation > highestEval) highestEval = node.totalEvaluation;
+    if (node.totalEvaluation == highestEval) {
+        raylib.DrawRectangleLinesEx(rectLine, 5, raylib.GREEN);
+    } else {
+        raylib.DrawRectangleLinesEx(rectLine, 5, raylib.RED);
+    }
+
+    if (node.action == NodeActionSet.finalizeLevel)
+        raylib.DrawRectangleLinesEx(rectLine, 5, raylib.BROWN);
 
     // draw title
     var nodeTitle = std.ArrayList(u8).init(std.heap.c_allocator);
@@ -400,7 +417,7 @@ pub fn drawCard(nodeVis: *NodeVis, nodeNum: usize) void {
     nodeTitle.appendSlice(std.fmt.allocPrint(std.heap.c_allocator, "{d}", .{nodeNum}) catch unreachable) catch unreachable;
     nodeTitle.append(0) catch unreachable;
     var titleText = @ptrCast([*:0]const u8, nodeTitle.items);
-    var titleX = cardXCenter - @divFloor(raylib.MeasureText(titleText, fontSize), 2);
+    var titleX = cardXCenter - @divFloor(raylib.MeasureText(titleText, @floatToInt(i32, fontSize)), 2);
     raylib.DrawTextEx(
         font,
         titleText,
@@ -419,7 +436,7 @@ pub fn drawCard(nodeVis: *NodeVis, nodeNum: usize) void {
     map.appendSlice(node.map.displayed.items) catch unreachable;
     map.append(0) catch unreachable;
     var mapText = @ptrCast([*:0]const u8, map.items);
-    var mapX = cardXCenter - @divFloor(raylib.MeasureText(mapText, fontSize), 2);
+    var mapX = cardXCenter - @divFloor(raylib.MeasureText(mapText, @floatToInt(i32, fontSize)), 2);
     raylib.DrawTextEx(
         font,
         mapText,
@@ -450,13 +467,13 @@ pub fn drawCard(nodeVis: *NodeVis, nodeNum: usize) void {
         2,
         raylib.WHITE,
     );
-    currentYProgress += 6 + fontSize;
+    currentYProgress += 6 + @floatToInt(i32, fontSize);
 
     // draw self.totalEvaluation
     var totEval = std.ArrayList(u8).init(std.heap.c_allocator);
     defer totEval.deinit();
     totEval.appendSlice("self.totalEvaluation = ") catch unreachable;
-    totEval.appendSlice(std.fmt.allocPrint(std.heap.c_allocator, "{d}", .{node.visits}) catch unreachable) catch unreachable;
+    totEval.appendSlice(std.fmt.allocPrint(std.heap.c_allocator, "{d}", .{node.totalEvaluation}) catch unreachable) catch unreachable;
     totEval.append(0) catch unreachable;
     var totEvalText = @ptrCast([*:0]const u8, totEval.items);
     var totEvalX = cardXCenter - @floatToInt(i32, @divFloor(raylib.MeasureTextEx(font, totEvalText, fontSize, 2).x, 2));
@@ -468,7 +485,7 @@ pub fn drawCard(nodeVis: *NodeVis, nodeNum: usize) void {
         2,
         raylib.WHITE,
     );
-    currentYProgress += 6 + fontSize;
+    currentYProgress += 6 + @floatToInt(i32, fontSize);
 
     // draw self.action
     var action = std.ArrayList(u8).init(std.heap.c_allocator);
