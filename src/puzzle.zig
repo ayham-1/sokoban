@@ -20,7 +20,7 @@ pub const Puzzle = struct {
     }
 
     pub fn deinit(self: *Puzzle) void {
-        //self.map.deinit();
+        self.map.deinit();
         _ = self;
     }
 

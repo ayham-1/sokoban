@@ -61,8 +61,9 @@ pub fn get(alloc: Allocator, levelSize: u8, boxCount: u8) !*Map {
     map.sizeHeight = levelSize;
     map.sizeWidth = levelSize;
 
+    generatedPuzzles = std.ArrayList(GeneratedPuzzle).init(alloc);
     var parentNode = Node.initAsParent(alloc, &map, boxCount);
-    var epoch: usize = 100;
+    var epoch: usize = 500;
     while (epoch > 0) {
         log.info("epoch number: {}", .{epoch});
         try parentNode.iterate();
@@ -70,7 +71,11 @@ pub fn get(alloc: Allocator, levelSize: u8, boxCount: u8) !*Map {
     }
 
     var finalMap: *Map = try map.clone();
-    var highestPuzzle: GeneratedPuzzle = parentNode.getBestLeaf().generatedPuzzle;
+    var highestPuzzle: GeneratedPuzzle = generatedPuzzles.items[0];
+    for (generatedPuzzles.items) |puzzle| {
+        if (puzzle.score >= highestPuzzle.score)
+            highestPuzzle = puzzle;
+    }
 
     finalMap.deinit();
     finalMap = highestPuzzle.map;
@@ -81,7 +86,9 @@ pub fn get(alloc: Allocator, levelSize: u8, boxCount: u8) !*Map {
 }
 
 pub const GeneratedPuzzle = struct { map: *Map, score: f32 };
-pub const NodeActionSet = enum(u6) { root, deleteWall, placeBox, freezeLevel, moveAgent, finalizeLevel };
+pub var generatedPuzzles: std.ArrayList(GeneratedPuzzle) = undefined;
+
+pub const NodeActionSet = enum(u6) { root, deleteWall, placeBox, freezeLevel, moveAgent, evaluateLevel };
 pub const Node = struct {
     alloc: Allocator,
     parent: ?*Node = null,
@@ -93,7 +100,7 @@ pub const Node = struct {
 
     isFreezed: bool = false,
     freezedMap: ?*Map = null,
-    generatedPuzzle: GeneratedPuzzle = undefined,
+    isReady: bool = false,
 
     visits: usize = 0,
     totalEvaluation: f32 = 0,
@@ -162,19 +169,6 @@ pub const Node = struct {
         }
     }
 
-    pub fn getBestLeaf(self: *Node) *Node {
-        var leaf = self;
-        while (leaf.children.items.len != 0) {
-            var children = leaf.children.items;
-            leaf = children[0];
-            for (children) |child| {
-                if (child.totalEvaluation >= leaf.totalEvaluation)
-                    leaf = child;
-            }
-        }
-        return leaf;
-    }
-
     fn evalBackProp(self: *Node) !void {
         // backpropagate to update parent nodes
         var score = try self.evaluationFunction();
@@ -191,7 +185,7 @@ pub const Node = struct {
 
     fn evaluationFunction(self: *Node) !f32 {
         // do post processing and store what we have of a puzzle
-        try self.finalizeLevel();
+        var processedLevel = try self.postProcessLevel();
 
         // calculate congestionVal
         var boxDockPairs = std.ArrayList(soko.BoxGoalPair).init(self.alloc);
@@ -203,21 +197,76 @@ pub const Node = struct {
                 }
             }
         }
-        var congestionVal = try computeCongestion(self.alloc, self.generatedPuzzle.map, boxDockPairs, 4, 4, 1);
+        var congestionVal = try computeCongestion(self.alloc, processedLevel.map, boxDockPairs, 4, 4, 1);
 
         // calculate evaluation using computeMapEval
-        var slice3x3Val = try compute3x3Blocks(self.alloc, self.generatedPuzzle.map);
+        var slice3x3Val = try compute3x3Blocks(self.alloc, processedLevel.map);
         var score = try computeMapEval(10, 5, 1, slice3x3Val, congestionVal, @intCast(i32, boxDockPairs.items.len));
 
         return score;
     }
 
-    pub fn expand(self: *Node) !void {
-        if (!self.isFreezed) {
-            try self.appendChild(self.map);
-            try self.children.items[self.children.items.len - 1].deleteWall();
+    /// save current box locations as goal locations
+    /// inform root node of generated puzzle + score
+    pub fn postProcessLevel(self: *Node) !GeneratedPuzzle {
+        self.isReady = true;
+        if (self.parent == null or self.freezedMap == null or self.freezedBoxPos.keys().len == 0) { // return current map
+            var generatedPuzzle = GeneratedPuzzle{
+                .map = try self.map.clone(),
+                .score = self.totalEvaluation,
+            };
+            return generatedPuzzle;
+        }
 
-            try self.placeBoxes();
+        // set current box positions as dock boxes
+        // and
+        // swap unmoved boxes as obstacles.
+        // do not use freezed map
+        //
+        // reset agent position
+        var generatedPuzzle = GeneratedPuzzle{
+            .map = try self.map.clone(),
+            .score = self.totalEvaluation,
+        };
+
+        var currentBoxPos = self.map.getBoxPositions();
+
+        for (self.freezedBoxPos.keys()) |pair| {
+            if (self.freezedBoxPos.get(pair)) |initialBoxPos| {
+                if (currentBoxPos.get(pair)) |finalBoxPos| {
+                    if (initialBoxPos.x == finalBoxPos.x and initialBoxPos.y == finalBoxPos.y) {
+                        generatedPuzzle.map.rows.items[initialBoxPos.y].items[initialBoxPos.x].tex = .wall;
+                    } else {
+                        generatedPuzzle.map.rows.items[initialBoxPos.y].items[initialBoxPos.x].tex = .box;
+                        generatedPuzzle.map.rows.items[finalBoxPos.y].items[finalBoxPos.x].tex = .dock;
+                    }
+                }
+            }
+        }
+        generatedPuzzle.map.rows.items[self.freezedMap.?.workerPos.y].items[self.freezedMap.?.workerPos.x].tex = .floor;
+        generatedPuzzle.map.rows.items[self.map.workerPos.y].items[self.map.workerPos.x].tex = .worker;
+        generatedPuzzle.map.setWorkerPos();
+        return generatedPuzzle;
+    }
+
+    pub fn ucb(self: *Node) f32 {
+        if (self.visits == 0) return std.math.f32_max;
+        const C: f32 = std.math.sqrt(2);
+        //const firstTerm: f32 = self.evaluationFunction() * (self.totalEvaluation / @intToFloat(f32, self.visits));
+        const firstTerm: f32 = ((self.parent orelse self).totalEvaluation / @intToFloat(f32, self.visits));
+        const secondTerm = C * std.math.sqrt(std.math.ln(@intToFloat(f32, (self.parent orelse self).visits)) / @intToFloat(f32, self.visits));
+        return firstTerm + secondTerm;
+    }
+
+    pub fn expand(self: *Node) !void {
+        // evaluate function is last
+        // in the action chain
+        if (self.action == .evaluateLevel) return;
+        if (!self.isFreezed) {
+            try self.deleteWall();
+
+            if (self.boxesPlaced != self.boxCountTarget)
+                try self.placeBox();
 
             if (self.boxesPlaced == self.boxCountTarget) {
                 // fruitless to freezeLevel without completing boxes
@@ -226,11 +275,20 @@ pub const Node = struct {
             }
         } else {
             try self.moveAgent();
+
+            try self.appendFreezedChild(self.map);
+            try self.children.items[self.children.items.len - 1].evaluateLevel();
         }
     }
 
+    /// saves the board
+    pub fn evaluateLevel(self: *Node) !void {
+        self.action = .evaluateLevel;
+
+        try generatedPuzzles.append(try self.postProcessLevel());
+    }
+
     pub fn deleteWall(self: *Node) !void {
-        self.action = NodeActionSet.deleteWall;
         // get all obstacles adjacent to free space non-diagonally.
         var obstacles = std.ArrayList(soko.Pos).init(self.alloc);
         defer obstacles.deinit();
@@ -253,25 +311,39 @@ pub const Node = struct {
                 }
             }
         }
+        if (obstacles.items.len == 0) return;
 
-        if (self.obstacleFirstTime) {
+        try self.appendChild(self.map);
+        var newSelf = self.children.items[self.children.items.len - 1];
+
+        if (newSelf.*.obstacleFirstTime) {
             for (obstacles.items) |pos| {
-                self.map.rows.items[pos.y].items[pos.x].tex = soko.TexType.floor;
+                newSelf.map.rows.items[pos.y].items[pos.x].tex = .floor;
             }
-            self.*.obstacleFirstTime = false;
-        }
+            newSelf.*.obstacleFirstTime = false;
+        } else {
+            //// remove number of left over obstacles, if left over is over 1
+            //var leftOver = newSelf.boxCountTarget - newSelf.boxesPlaced;
+            //if (leftOver > 1) {
+            //    for (obstacles.items) |pos| {
+            //        if (leftOver == 0) break;
+            //        defer leftOver -= 1;
 
-        // pick random obstacle to remove
-        for (obstacles.items) |_| {
+            //        newSelf.map.rows.items[pos.y].items[pos.x].tex = .floor;
+            //    }
+            //} else {
+            // pick random obstacle to remove
             var randomNumber = rnd.random().intRangeAtMost(usize, 0, obstacles.items.len - 1);
             var x = obstacles.items[randomNumber].x;
             var y = obstacles.items[randomNumber].y;
 
-            self.map.rows.items[y].items[x].tex = soko.TexType.floor;
+            newSelf.map.rows.items[y].items[x].tex = .floor;
+            newSelf.action = .deleteWall;
+            //}
         }
     }
 
-    pub fn placeBoxes(self: *Node) !void {
+    pub fn placeBox(self: *Node) !void {
         var floorTiles = std.ArrayList(soko.Pos).init(self.alloc);
         defer floorTiles.deinit();
 
@@ -292,20 +364,16 @@ pub const Node = struct {
         // create a new node
         try self.appendChild(self.map);
 
-        while (self.children.items[self.children.items.len - 1].boxesPlaced < self.boxCountTarget) {
-            // convert random floor item to box
-            var randomNumber = rnd.random().intRangeAtMost(usize, 0, floorTiles.items.len - 1);
-            var x = floorTiles.items[randomNumber].x;
-            var y = floorTiles.items[randomNumber].y;
+        // convert random floor item to box
+        var randomNumber = rnd.random().intRangeAtMost(usize, 0, floorTiles.items.len - 1);
+        var x = floorTiles.items[randomNumber].x;
+        var y = floorTiles.items[randomNumber].y;
 
-            // place box in a random location
-            self.children.items[self.children.items.len - 1].map.rows.items[y].items[x].tex = soko.TexType.box;
+        // place box in a random location
+        self.children.items[self.children.items.len - 1].map.rows.items[y].items[x].tex = soko.TexType.box;
 
-            // save box location
-            var boxId = self.map.rows.items[y].items[x].id;
-            try self.children.items[self.children.items.len - 1].freezedBoxPos.put(boxId, soko.Pos{ .x = x, .y = y });
-            self.children.items[self.children.items.len - 1].boxesPlaced += 1;
-        }
+        // save box location
+        self.children.items[self.children.items.len - 1].boxesPlaced += 1;
         self.children.items[self.children.items.len - 1].action = NodeActionSet.placeBox;
     }
 
@@ -315,84 +383,55 @@ pub const Node = struct {
         self.action = NodeActionSet.freezeLevel;
         self.isFreezed = true;
         self.freezedMap = try self.map.clone();
+        self.freezedBoxPos = self.freezedMap.?.getBoxPositions();
     }
 
     /// move agent randomly until all boxes are moved
-    /// this function is meant to be called from finalizeLevel
     pub fn moveAgent(self: *Node) !void {
-        //self.action = NodeActionSet.moveAgent;
+        // reject creation of a move node if we can't move boxes
+        // stops player mania when a box can't be moved.
+        if (!self.canAllBoxesMove()) return;
 
-        // for each possible worker move create another node.
-        try self.moveAgentPerAct(soko.ActType.up);
-        try self.moveAgentPerAct(soko.ActType.down);
-        try self.moveAgentPerAct(soko.ActType.left);
-        try self.moveAgentPerAct(soko.ActType.right);
-    }
+        var puzzle = Puzzle.init(self.alloc, try self.map.clone().*);
+        defer puzzle.deinit();
 
-    fn moveAgentPerAct(self: *Node, act: soko.ActType) !void {
-        var passableMap = try self.map.clone();
-        var puzzle = Puzzle.init(self.alloc, passableMap.*);
-        defer {
-            puzzle.deinit();
-            //passableMap.deinit();
-            self.alloc.destroy(passableMap);
-        }
-        puzzle.move(act) catch return;
-        if (puzzle.workerMoved) {
-            try self.appendFreezedChild(try puzzle.map.clone());
-            self.children.items[self.children.items.len - 1].*.action = NodeActionSet.moveAgent;
-        }
-    }
+        var initialBoxPositions = self.map.getBoxPositions();
+        defer initialBoxPositions.deinit();
 
-    /// save current box locations as goal locations
-    /// inform root node of generated puzzle + score
-    pub fn finalizeLevel(self: *Node) !void {
-        if (self.parent == null or self.freezedMap == null or self.freezedBoxPos.keys().len == 0) { // return current map
-            var generatedPuzzle = GeneratedPuzzle{
-                .map = try self.map.clone(),
-                .score = self.totalEvaluation,
-            };
-            self.generatedPuzzle = generatedPuzzle;
-            return;
-        }
-        //self.action = NodeActionSet.finalizeLevel;
-
-        // set current box positions as dock boxes
-        // and
-        // swap unmoved boxes as obstacles.
-        // use freezed map
-
-        var currentBoxPos = self.map.getBoxPositions();
-        if (currentBoxPos.keys().len == 0) return;
-
-        for (self.freezedBoxPos.keys()) |pair| {
-            if (self.freezedBoxPos.get(pair)) |initialBoxPos| {
-                if (currentBoxPos.get(pair)) |finalBoxPos| {
-                    if (initialBoxPos.x == finalBoxPos.x and initialBoxPos.y == finalBoxPos.y) {
-                        self.freezedMap.?.rows.items[initialBoxPos.y].items[initialBoxPos.x].tex = .wall;
-                    } else {
-                        self.freezedMap.?.rows.items[initialBoxPos.y].items[initialBoxPos.x].tex = soko.TexType.box;
-                        self.freezedMap.?.rows.items[finalBoxPos.y].items[finalBoxPos.x].tex = soko.TexType.dock;
-                    }
-                }
+        var randomNumber = rnd.random().intRangeAtMost(usize, 0, 3);
+        while (!Node.areAllBoxesMoved(puzzle, initialBoxPositions)) {
+            switch (randomNumber) {
+                0 => puzzle.move(soko.ActType.up),
+                1 => puzzle.move(soko.ActType.down),
+                2 => puzzle.move(soko.ActType.left),
+                3 => puzzle.move(soko.ActType.right),
             }
         }
-
-        // save current puzzle
-        var generatedPuzzle = GeneratedPuzzle{
-            .map = try self.freezedMap.?.clone(),
-            .score = self.totalEvaluation,
-        };
-        self.generatedPuzzle = generatedPuzzle;
     }
 
-    pub fn ucb(self: *Node) f32 {
-        if (self.visits == 0) return std.math.f32_max;
-        const C: f32 = std.math.sqrt(2);
-        //const firstTerm: f32 = self.evaluationFunction() * (self.totalEvaluation / @intToFloat(f32, self.visits));
-        const firstTerm: f32 = (self.evaluationFunction() catch unreachable) * (@intToFloat(f32, (self.parent orelse self).visits) / @intToFloat(f32, self.visits));
-        const secondTerm = C * std.math.sqrt(std.math.ln(@intToFloat(f32, (self.parent orelse self).visits)) / @intToFloat(f32, self.visits));
-        return firstTerm + secondTerm;
+    fn canAllBoxesMove(map: *Map) bool {
+        const maxI = map.rows.items.len;
+        for (map.rows.items) |rows, i| {
+            for (rows.items) |item, j| {
+                if (item != .box) continue;
+
+                const maxJ = rows.items.len;
+                if (i == maxI and j == maxJ) return false;
+                if (i == 0 and j == 0) return false;
+            }
+        }
+        _ = map;
+    }
+
+    fn areAllBoxesMoved(puzzle: Puzzle, initialBoxPos: std.AutoArrayHashMap(u8, soko.Pos)) bool {
+        var currentBoxPositions = puzzle.map.getBoxPositions();
+        for (currentBoxPositions.keys()) |key| {
+            if (currentBoxPositions.get(key)) |finalPos|
+                if (initialBoxPos.get(key)) |initialPos|
+                    if (finalPos.x == initialPos.x and finalPos.y == initialPos.y)
+                        return false;
+        }
+        return true;
     }
 
     pub fn getListOfBestLeaves(self: *Node, list: *std.ArrayList(*Node)) void {
@@ -453,7 +492,7 @@ pub const Node = struct {
 ///
 /// returns - float value of evaluation
 pub fn computeMapEval(weightSlice3x3: f32, weightCongestion: f32, weightBoxCount: f32, slice3x3Val: i32, congestionVal: f32, boxCount: i32) !f32 {
-    const k = 50;
+    const k = 200;
     return (weightSlice3x3 * @intToFloat(f32, slice3x3Val) + weightCongestion * congestionVal + weightBoxCount * @intToFloat(f32, boxCount)) / k;
 }
 

@@ -2,8 +2,9 @@ const std = @import("std");
 const log = @import("log.zig");
 const raylib = @import("./raylib/raylib.zig");
 const soko = @import("constants.zig");
-const Node = @import("generator.zig").Node;
-const NodeActionSet = @import("generator.zig").NodeActionSet;
+const Gen = @import("generator.zig");
+const Node = Gen.Node;
+const NodeActionSet = Gen.NodeActionSet;
 const Map = @import("map.zig").Map;
 
 const ZecsiAllocator = @import("allocator.zig").ZecsiAllocator;
@@ -56,6 +57,7 @@ fn init() void {
     map.sizeHeight = @intCast(i32, levelSize);
     map.sizeWidth = @intCast(i32, levelSize);
 
+    Gen.generatedPuzzles = std.ArrayList(Gen.GeneratedPuzzle).init(alloc);
     parentNode = Node.initAsParent(alloc, map, boxCount);
 }
 
@@ -403,13 +405,9 @@ pub fn drawCard(nodeVis: *NodeVis, nodeNum: usize) void {
         .height = @intToFloat(f32, cardHeight),
     };
     if (node.parent != null and node.totalEvaluation > highestEval) highestEval = node.totalEvaluation;
-    if (node.getTreeRoot().getBestLeaf() == nodeVis.node) {
-        raylib.DrawRectangleLinesEx(rectLine, 5, raylib.GREEN);
-    } else {
-        raylib.DrawRectangleLinesEx(rectLine, 5, raylib.RED);
-    }
+    raylib.DrawRectangleLinesEx(rectLine, 5, raylib.RED);
 
-    if (node.action == NodeActionSet.finalizeLevel)
+    if (node.action == NodeActionSet.evaluateLevel)
         raylib.DrawRectangleLinesEx(rectLine, 5, raylib.BROWN);
 
     // draw title
@@ -499,7 +497,7 @@ pub fn drawCard(nodeVis: *NodeVis, nodeNum: usize) void {
         .placeBox => action.appendSlice("placeBox") catch unreachable,
         .freezeLevel => action.appendSlice("freezeLevel") catch unreachable,
         .moveAgent => action.appendSlice("moveAgent") catch unreachable,
-        .finalizeLevel => action.appendSlice("finalizeLevel") catch unreachable,
+        .evaluateLevel => action.appendSlice("evaluateLevel") catch unreachable,
     }
     action.append(0) catch unreachable;
     var actionText = @ptrCast([*:0]const u8, action.items);
