@@ -66,6 +66,7 @@ pub fn main() !void {
         while (iterateTimes > 0) {
             try parentNode.iterate();
             iterateTimes -= 1;
+            log.info("epochs left: {}", .{iterateTimes});
         }
     }
     raylib.InitWindow(screenWidth, screenHeight, "Sokoban Puzzle Generator Visualizer");
@@ -101,7 +102,7 @@ pub fn main() !void {
             parentNodeVis = NodeVis.init(arena.allocator(), parentNode);
             parentNodeVis.positionTree(0.25, 0.25);
             drawCard(parentNodeVis, 0);
-            arena.deinit();
+            //arena.deinit();
         }
 
         // update
@@ -119,8 +120,9 @@ pub fn main() !void {
             if (raylib.IsMouseButtonDown(.MOUSE_BUTTON_LEFT))
                 camera2D.target = raylib.GetScreenToWorld2D(raylib.Vector2Add(camera2D.offset, delta), camera2D);
 
-            if (raylib.IsKeyPressed(.KEY_SPACE))
+            if (raylib.IsKeyPressed(.KEY_SPACE)) {
                 parentNode.iterate() catch unreachable;
+            }
 
             if (raylib.IsKeyDown(.KEY_Z))
                 camera2D.zoom += 0.01;
@@ -401,7 +403,7 @@ pub fn drawCard(nodeVis: *NodeVis, nodeNum: usize) void {
         .height = @intToFloat(f32, cardHeight),
     };
     if (node.parent != null and node.totalEvaluation > highestEval) highestEval = node.totalEvaluation;
-    if (node.totalEvaluation == highestEval) {
+    if (node.getTreeRoot().getBestLeaf() == nodeVis.node) {
         raylib.DrawRectangleLinesEx(rectLine, 5, raylib.GREEN);
     } else {
         raylib.DrawRectangleLinesEx(rectLine, 5, raylib.RED);

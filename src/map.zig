@@ -92,13 +92,13 @@ pub const Map = struct {
         self.rows = result;
     }
 
-    pub fn getBoxPositions(self: *Map) !std.AutoArrayHashMap(u8, soko.Pos) {
+    pub fn getBoxPositions(self: *Map) std.AutoArrayHashMap(u8, soko.Pos) {
         var boxPositions = std.AutoArrayHashMap(u8, soko.Pos).init(self.alloc);
 
         for (self.rows.items) |row, i| {
             for (row.items) |item, j| {
                 switch (item.tex) {
-                    .box, .boxDocked => try boxPositions.put(item.id, soko.Pos{ .x = j, .y = i }),
+                    .box, .boxDocked => boxPositions.put(item.id, soko.Pos{ .x = j, .y = i }) catch unreachable,
                     else => {},
                 }
             }
