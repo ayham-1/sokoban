@@ -35,7 +35,7 @@ const RndGen = std.rand.DefaultPrng;
 var seed: u64 = undefined;
 var rnd: std.rand.Xoshiro256 = undefined;
 
-pub fn get(alloc: Allocator, levelSize: u8, boxCount: u8) !*Map {
+pub fn get(alloc: Allocator, levelSize: u8, boxCount: u8, iter: i64) !*Map {
     try std.os.getrandom(std.mem.asBytes(&seed));
     rnd = std.rand.DefaultPrng.init(seed);
 
@@ -68,7 +68,7 @@ pub fn get(alloc: Allocator, levelSize: u8, boxCount: u8) !*Map {
 
     nodezig.generatedPuzzles = std.ArrayList(GeneratedPuzzle).init(alloc);
     var parentNode = Node.initAsParent(alloc, &map, boxCount);
-    parentNode.iterator(500);
+    parentNode.iterator(iter);
 
     var finalMap: *Map = try map.clone();
     var highestPuzzle: GeneratedPuzzle = nodezig.generatedPuzzles.items[0];

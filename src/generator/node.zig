@@ -479,7 +479,35 @@ pub const Node = struct {
                         (map.rows.items[pos.y].items[pos.x + 1].tex == .floor or
                         map.rows.items[pos.y].items[pos.x + 1].tex == .worker or
                         map.rows.items[pos.y].items[pos.x + 1].tex == .workerDocked))
-                        isBoxMovable = true;
+                    {
+                        // check for box being approachable by agent
+                        // wwwww
+                        // w.b..   <- approachable
+                        // ww.ww
+                        //
+                        // wwwww
+                        // w.b.w   <- unapproachable
+                        // ww.ww
+                        //
+                        // assumes that obstacles deleted are always adjacent
+                        // to wall
+                        //
+                        // check if either empty sides have another atleast
+                        // empty floor
+                        var emptyPosLeft = soko.Pos{ .x = pos.x - 1, .y = pos.y };
+                        var emptyPosRight = soko.Pos{ .x = pos.x + 1, .y = pos.y };
+
+                        if (pos.y > 0 and pos.y < map.rows.items.len - 1) {
+                            if (map.rows.items[emptyPosLeft.y - 1].items[emptyPosLeft.x].tex == .floor) isBoxMovable = true;
+                            if (map.rows.items[emptyPosRight.y - 1].items[emptyPosRight.x].tex == .floor) isBoxMovable = true;
+
+                            if (map.rows.items[emptyPosLeft.y + 1].items[emptyPosLeft.x].tex == .floor) isBoxMovable = true;
+                            if (map.rows.items[emptyPosRight.y + 1].items[emptyPosRight.x].tex == .floor) isBoxMovable = true;
+                        } else {
+                            if (map.rows.items[emptyPosLeft.y].items[emptyPosLeft.x - 1].tex == .floor) isBoxMovable = true;
+                            if (map.rows.items[emptyPosRight.y].items[emptyPosRight.x + 1].tex == .floor) isBoxMovable = true;
+                        }
+                    }
                 }
 
                 // check vertical
@@ -490,7 +518,24 @@ pub const Node = struct {
                         (map.rows.items[pos.y + 1].items[pos.x].tex == .floor or
                         map.rows.items[pos.y + 1].items[pos.x].tex == .worker or
                         map.rows.items[pos.y + 1].items[pos.x].tex == .workerDocked))
-                        isBoxMovable = true;
+                    {
+                        var emptyPosUp = soko.Pos{ .x = pos.x, .y = pos.y - 1 };
+                        var emptyPosDown = soko.Pos{ .x = pos.x, .y = pos.y + 1 };
+
+                        if (pos.x > 0 and pos.x < map.rows.items.len - 1) {
+                            if (map.rows.items[emptyPosUp.y].items[emptyPosUp.x - 1].tex == .floor) isBoxMovable = true;
+                            if (map.rows.items[emptyPosDown.y].items[emptyPosDown.x - 1].tex == .floor) isBoxMovable = true;
+
+                            if (map.rows.items[emptyPosUp.y].items[emptyPosUp.x + 1].tex == .floor) isBoxMovable = true;
+                            if (map.rows.items[emptyPosDown.y].items[emptyPosDown.x + 1].tex == .floor) isBoxMovable = true;
+                        } else {
+                            if (map.rows.items[emptyPosUp.y].items[emptyPosUp.x - 1].tex == .floor) isBoxMovable = true;
+                            if (map.rows.items[emptyPosDown.y].items[emptyPosDown.x - 1].tex == .floor) isBoxMovable = true;
+
+                            if (map.rows.items[emptyPosUp.y].items[emptyPosUp.x + 1].tex == .floor) isBoxMovable = true;
+                            if (map.rows.items[emptyPosDown.y].items[emptyPosDown.x + 1].tex == .floor) isBoxMovable = true;
+                        }
+                    }
                 }
 
                 if (!isBoxMovable) return false;
