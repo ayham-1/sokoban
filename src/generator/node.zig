@@ -79,13 +79,32 @@ pub const Node = struct {
         try self.children.append(result);
     }
 
-    //pub fn iterator(self: *Node, epoch: usize) void {
-    //    var epochsLeft: usize = epoch;
-    //    while (epochsLeft > 0) {
-    //        defer epochsLeft -= 1;
+    pub fn iterator(self: *Node, epoch: i64) void {
+        var epochsLeft: i64 = epoch;
+        var totalTime: i64 = 0;
+        var totalExploitOverExplore: f64 = 0;
+        while (epochsLeft > 0) {
+            defer epochsLeft -= 1;
 
-    //    }
-    //}
+            var timestamp = std.time.milliTimestamp();
+            self.iterate() catch unreachable;
+            var timeTaken = std.time.milliTimestamp() - timestamp;
+            totalTime += timeTaken;
+
+            var exploitationOverExploration = self.exploitation() / self.exploration();
+            totalExploitOverExplore += exploitationOverExploration;
+
+            log.info("iter#{}: time: {}ms, explore/exploit: {d:.3}", .{
+                epoch - epochsLeft,
+                timeTaken,
+                exploitationOverExploration,
+            });
+        }
+        log.info("avg. time: {}ms, avg. explore/exploit: {}", .{
+            @divFloor(totalTime, epoch),
+            @divFloor(totalExploitOverExplore, @intToFloat(f32, epoch)),
+        });
+    }
 
     pub fn iterate(self: *Node) !void {
         // get the list of best leaves
@@ -136,7 +155,7 @@ pub const Node = struct {
                 }
             }
         }
-        var congestionVal = try computeCongestion(self.alloc, processedLevel.map, boxDockPairs, 4, 4, 1);
+        var congestionVal = try computeCongestion(self.alloc, processedLevel.map, boxDockPairs, 4, 4, 0.5);
 
         // calculate evaluation using computeMapEval
         var slice3x3Val = try compute3x3Blocks(processedLevel.map);
@@ -198,13 +217,19 @@ pub const Node = struct {
         return generatedPuzzle;
     }
 
+    pub fn exploitation(self: *Node) f32 {
+        return ((self.parent orelse self).totalEvaluation / @intToFloat(f32, self.visits));
+    }
+
+    pub fn exploration(self: *Node) f32 {
+        const C: f32 = std.math.sqrt(2);
+
+        return C * std.math.sqrt(std.math.ln(@intToFloat(f32, (self.parent orelse self).visits)) / @intToFloat(f32, self.visits));
+    }
+
     pub fn ucb(self: *Node) f32 {
         if (self.visits == 0) return std.math.f32_max;
-        const C: f32 = std.math.sqrt(2);
-        //const firstTerm: f32 = self.evaluationFunction() * (self.totalEvaluation / @intToFloat(f32, self.visits));
-        const firstTerm: f32 = ((self.parent orelse self).totalEvaluation / @intToFloat(f32, self.visits));
-        const secondTerm = C * std.math.sqrt(std.math.ln(@intToFloat(f32, (self.parent orelse self).visits)) / @intToFloat(f32, self.visits));
-        return firstTerm + secondTerm;
+        return self.exploitation() + self.exploration();
     }
 
     pub fn expand(self: *Node) !void {

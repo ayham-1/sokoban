@@ -18,9 +18,18 @@ const Allocator = std.mem.Allocator;
 /// boxCount - value
 ///
 /// returns - float value of evaluation
-pub fn computeMapEval(weightSlice3x3: f32, weightCongestion: f32, weightBoxCount: f32, slice3x3Val: i32, congestionVal: f32, boxCount: i32) !f32 {
-    const k = 50;
-    return (weightSlice3x3 * @intToFloat(f32, slice3x3Val) + weightCongestion * congestionVal + weightBoxCount * @intToFloat(f32, boxCount)) / k;
+pub fn computeMapEval(
+    weightSlice3x3: f32,
+    weightCongestion: f32,
+    weightBoxCount: f32,
+    slice3x3Val: i32,
+    congestionVal: f32,
+    boxCount: i32,
+) !f32 {
+    const k = 200;
+    return (weightSlice3x3 * @intToFloat(f32, slice3x3Val) +
+        weightCongestion * congestionVal +
+        weightBoxCount * @intToFloat(f32, boxCount)) / k;
 }
 
 /// The higher the return value the higher the congested factor of the sokoban
@@ -31,7 +40,14 @@ pub fn computeMapEval(weightSlice3x3: f32, weightCongestion: f32, weightBoxCount
 /// boxPairs - list of bounding rectangles of every box and its final position/goal
 ///
 /// returns the congestion feature analysis factor
-pub fn computeCongestion(alloc: Allocator, map: *Map, boxGoalPairs: std.ArrayList(soko.BoxGoalPair), wBoxCount: f32, wGoalCount: f32, wObstacleCount: f32) !f32 {
+pub fn computeCongestion(
+    alloc: Allocator,
+    map: *Map,
+    boxGoalPairs: std.ArrayList(soko.BoxGoalPair),
+    wBoxCount: f32,
+    wGoalCount: f32,
+    wObstacleCount: f32,
+) !f32 {
     var congestion: f32 = 0.0;
     for (boxGoalPairs.items) |pair| {
         // retreive the bounding rectangle

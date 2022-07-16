@@ -15,7 +15,6 @@
 //! 12(1),
 //! 58-64.
 //! Retrieved from https://ojs.aaai.org/index.php/AIIDE/article/view/12859
-//! TODO: remove public properties
 //! TODO: remove assumption of square map
 
 const std = @import("std");
@@ -69,12 +68,7 @@ pub fn get(alloc: Allocator, levelSize: u8, boxCount: u8) !*Map {
 
     nodezig.generatedPuzzles = std.ArrayList(GeneratedPuzzle).init(alloc);
     var parentNode = Node.initAsParent(alloc, &map, boxCount);
-    var epoch: usize = 500;
-    while (epoch > 0) {
-        log.info("epoch number: {}", .{epoch});
-        try parentNode.iterate();
-        epoch -= 1;
-    }
+    parentNode.iterator(500);
 
     var finalMap: *Map = try map.clone();
     var highestPuzzle: GeneratedPuzzle = nodezig.generatedPuzzles.items[0];
@@ -85,7 +79,7 @@ pub fn get(alloc: Allocator, levelSize: u8, boxCount: u8) !*Map {
 
     finalMap.deinit();
     finalMap = highestPuzzle.map;
-    log.info("score: {}", .{highestPuzzle.score});
+    log.info("score: {d:.3}", .{highestPuzzle.score});
     log.info("generated puzzles: {}", .{nodezig.generatedPuzzles.items.len});
 
     finalMap.setWorkerPos();
