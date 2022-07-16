@@ -6,6 +6,7 @@ pub const mapBorder: i32 = 6;
 
 pub const MapRowArray = std.ArrayList(Textile);
 pub const MapArray = std.ArrayList(MapRowArray);
+pub const TexId = u8;
 
 pub const MapError = error{MapError};
 pub const InvalidPos = error{InvalidPos};

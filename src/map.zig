@@ -6,21 +6,24 @@ const Allocator = std.mem.Allocator;
 pub const Map = struct {
     alloc: Allocator,
     rows: soko.MapArray,
-    highestId: u8 = 1,
+    highestId: soko.TexId = 1,
     displayed: std.ArrayList(u8) = undefined,
     sizeWidth: i32 = 0,
     sizeHeight: i32 = 0,
     workerPos: soko.Pos = undefined,
+    boxPos: std.AutoArrayHashMap(soko.TexId, soko.Pos),
 
-    pub fn init(allocator: Allocator) Map {
+    pub fn init(alloc: Allocator) Map {
         var map = Map{
-            .alloc = allocator,
-            .rows = soko.MapArray.init(allocator),
-            .displayed = std.ArrayList(u8).init(allocator),
+            .alloc = alloc,
+            .rows = soko.MapArray.init(alloc),
+            .displayed = std.ArrayList(u8).init(alloc),
+            .boxPos = std.AutoArrayHashMap(soko.TexId, soko.Pos).init(alloc),
         };
 
         // find worker pos
         map.setWorkerPos();
+        map.setBoxPositions();
         return map;
     }
 
@@ -92,19 +95,16 @@ pub const Map = struct {
         self.rows = result;
     }
 
-    pub fn getBoxPositions(self: *Map) std.AutoArrayHashMap(u8, soko.Pos) {
-        var boxPositions = std.AutoArrayHashMap(u8, soko.Pos).init(self.alloc);
-
+    fn setBoxPositions(self: *Map) void {
+        self.boxPos.clearAndFree();
         for (self.rows.items) |row, i| {
             for (row.items) |item, j| {
                 switch (item.tex) {
-                    .box, .boxDocked => boxPositions.put(item.id, soko.Pos{ .x = j, .y = i }) catch unreachable,
+                    .box, .boxDocked => self.boxPos.put(item.id, soko.Pos{ .x = j, .y = i }) catch unreachable,
                     else => {},
                 }
             }
         }
-
-        return boxPositions;
     }
 
     pub fn setWorkerPos(self: *Map) void {
@@ -128,6 +128,7 @@ pub const Map = struct {
             try cloned.rows.append(try row.clone());
         }
         cloned.displayed = try self.displayed.clone();
+        cloned.boxPos = try self.boxPos.clone();
         cloned.setWorkerPos();
         return cloned;
     }

@@ -51,6 +51,9 @@ pub const Puzzle = struct {
             };
             self.map.rows.items[boxNewPos.y].items[boxNewPos.x].id = destTile.id; // retain id
 
+            // save box location
+            try self.map.boxPos.put(destTile.id, boxNewPos);
+
             // switch workerNewPos, originally box location, with current workerPos
             self.map.rows.items[workerNewPos.y].items[workerNewPos.x].tex = switch (destTile.tex) {
                 .box => .worker,
