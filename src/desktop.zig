@@ -30,7 +30,7 @@ pub fn main() anyerror!void {
     //var map = Map.init(alloc);
     //try map.build(gameMap);
 
-    var map = try generator.get(alloc, 5, 3);
+    var map = try generator.get(alloc, 8, 5);
     defer map.deinit();
 
     try game.start(map.*);

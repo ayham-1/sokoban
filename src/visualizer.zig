@@ -18,12 +18,12 @@ var font: raylib.Font = undefined;
 const screenWidth = 1000;
 const screenHeight = 600;
 
-const levelSize = 5;
+const levelSize = 8;
 var boxCount: usize = 3;
 var parentNode: *Node = undefined;
 var parentNodeVis: *NodeVis = undefined;
 
-var fontSize: f32 = 14;
+var fontSize: f32 = 24;
 
 fn init() void {
     std.os.getrandom(std.mem.asBytes(&seed)) catch unreachable;
@@ -408,7 +408,7 @@ pub fn drawCard(nodeVis: *NodeVis, nodeNum: usize) void {
     raylib.DrawRectangleLinesEx(rectLine, 5, raylib.RED);
 
     if (node.action == NodeActionSet.evaluateLevel)
-        raylib.DrawRectangleLinesEx(rectLine, 5, raylib.BROWN);
+        raylib.DrawRectangleLinesEx(rectLine, 5, raylib.GREEN);
 
     // draw title
     var nodeTitle = std.ArrayList(u8).init(std.heap.c_allocator);

@@ -63,7 +63,7 @@ pub fn get(alloc: Allocator, levelSize: u8, boxCount: u8) !*Map {
 
     generatedPuzzles = std.ArrayList(GeneratedPuzzle).init(alloc);
     var parentNode = Node.initAsParent(alloc, &map, boxCount);
-    var epoch: usize = 500;
+    var epoch: usize = 600;
     while (epoch > 0) {
         log.info("epoch number: {}", .{epoch});
         try parentNode.iterate();
@@ -236,6 +236,16 @@ pub const Node = struct {
                 if (currentBoxPos.get(pair)) |finalBoxPos| {
                     if (initialBoxPos.x == finalBoxPos.x and initialBoxPos.y == finalBoxPos.y) {
                         generatedPuzzle.map.rows.items[initialBoxPos.y].items[initialBoxPos.x].tex = .wall;
+                    } else if ((try std.math.absInt(@intCast(i32, initialBoxPos.x) - @intCast(i32, finalBoxPos.x))) == 1 and
+                        (try std.math.absInt(@intCast(i32, initialBoxPos.y) - @intCast(i32, finalBoxPos.y))) == 0)
+                    {
+                        generatedPuzzle.map.rows.items[initialBoxPos.y].items[initialBoxPos.x].tex = .floor;
+                        generatedPuzzle.map.rows.items[finalBoxPos.y].items[finalBoxPos.x].tex = .floor;
+                    } else if ((try std.math.absInt(@intCast(i32, initialBoxPos.y) - @intCast(i32, finalBoxPos.y))) == 1 and
+                        (try std.math.absInt(@intCast(i32, initialBoxPos.x) - @intCast(i32, finalBoxPos.x))) == 0)
+                    {
+                        generatedPuzzle.map.rows.items[initialBoxPos.y].items[initialBoxPos.x].tex = .floor;
+                        generatedPuzzle.map.rows.items[finalBoxPos.y].items[finalBoxPos.x].tex = .floor;
                     } else {
                         generatedPuzzle.map.rows.items[initialBoxPos.y].items[initialBoxPos.x].tex = .box;
                         generatedPuzzle.map.rows.items[finalBoxPos.y].items[finalBoxPos.x].tex = .dock;
@@ -265,7 +275,7 @@ pub const Node = struct {
         if (!self.isFreezed) {
             try self.deleteWall();
 
-            if (self.boxesPlaced != self.boxCountTarget)
+            if (self.boxesPlaced < self.boxCountTarget)
                 try self.placeBox();
 
             if (self.boxesPlaced == self.boxCountTarget) {
@@ -275,9 +285,6 @@ pub const Node = struct {
             }
         } else {
             try self.moveAgent();
-
-            try self.appendFreezedChild(self.map);
-            try self.children.items[self.children.items.len - 1].evaluateLevel();
         }
     }
 
@@ -285,16 +292,22 @@ pub const Node = struct {
     pub fn evaluateLevel(self: *Node) !void {
         self.action = .evaluateLevel;
 
+        log.warn("hello eval?: {s}", .{self.map.displayed.items});
         try generatedPuzzles.append(try self.postProcessLevel());
+        generatedPuzzles.items[generatedPuzzles.items.len - 1].score = try self.evaluationFunction();
     }
 
     pub fn deleteWall(self: *Node) !void {
         // get all obstacles adjacent to free space non-diagonally.
+        // doesn't return edge obstacles
+        //
         var obstacles = std.ArrayList(soko.Pos).init(self.alloc);
         defer obstacles.deinit();
 
         for (self.map.rows.items) |row, i| {
+            if (i == 0 or i == self.map.rows.items.len - 1) continue;
             for (row.items) |item, j| {
+                if (j == 0 or j == row.items.len - 1) continue;
                 if (item.tex == .floor or item.tex == .worker or item.tex == .box) {
                     if (j != 0 and self.map.rows.items[i].items[j - 1].tex == .wall) {
                         try obstacles.append(soko.Pos{ .x = j - 1, .y = i });
@@ -315,6 +328,7 @@ pub const Node = struct {
 
         try self.appendChild(self.map);
         var newSelf = self.children.items[self.children.items.len - 1];
+        newSelf.action = .deleteWall;
 
         if (newSelf.*.obstacleFirstTime) {
             for (obstacles.items) |pos| {
@@ -322,24 +336,27 @@ pub const Node = struct {
             }
             newSelf.*.obstacleFirstTime = false;
         } else {
-            //// remove number of left over obstacles, if left over is over 1
-            //var leftOver = newSelf.boxCountTarget - newSelf.boxesPlaced;
-            //if (leftOver > 1) {
-            //    for (obstacles.items) |pos| {
-            //        if (leftOver == 0) break;
-            //        defer leftOver -= 1;
+            // remove number of left over obstacles, if left over is over 1
+            //log.warn("{}, {}", .{ newSelf.boxCountTarget, newSelf.boxesPlaced });
+            var leftOver = newSelf.boxCountTarget - newSelf.boxesPlaced;
+            if (leftOver > 1 and leftOver < obstacles.items.len) {
+                while (leftOver > 0) {
+                    var randomNumber = rnd.random().intRangeAtMost(usize, 0, obstacles.items.len - 1);
+                    var x = obstacles.items[randomNumber].x;
+                    var y = obstacles.items[randomNumber].y;
+                    if (newSelf.map.rows.items[y].items[x].tex == .floor) continue;
+                    defer leftOver -= 1;
 
-            //        newSelf.map.rows.items[pos.y].items[pos.x].tex = .floor;
-            //    }
-            //} else {
-            // pick random obstacle to remove
-            var randomNumber = rnd.random().intRangeAtMost(usize, 0, obstacles.items.len - 1);
-            var x = obstacles.items[randomNumber].x;
-            var y = obstacles.items[randomNumber].y;
+                    newSelf.map.rows.items[y].items[x].tex = .floor;
+                }
+            } else {
+                // pick random obstacle to remove
+                var randomNumber = rnd.random().intRangeAtMost(usize, 0, obstacles.items.len - 1);
+                var x = obstacles.items[randomNumber].x;
+                var y = obstacles.items[randomNumber].y;
 
-            newSelf.map.rows.items[y].items[x].tex = .floor;
-            newSelf.action = .deleteWall;
-            //}
+                newSelf.map.rows.items[y].items[x].tex = .floor;
+            }
         }
     }
 
@@ -361,20 +378,46 @@ pub const Node = struct {
 
         if (floorTiles.items.len <= self.boxCountTarget) return;
 
-        // create a new node
-        try self.appendChild(self.map);
+        // convert movable tile position item to box
+        //var removeOffset: usize = 0;
+        while (floorTiles.items.len != 0) {
+            var newMap = try self.map.clone();
+            defer newMap.deinit();
 
-        // convert random floor item to box
-        var randomNumber = rnd.random().intRangeAtMost(usize, 0, floorTiles.items.len - 1);
-        var x = floorTiles.items[randomNumber].x;
-        var y = floorTiles.items[randomNumber].y;
+            // validate random number
+            var randomNumber = rnd.random().intRangeAtMost(usize, 0, floorTiles.items.len - 1);
+            var x = floorTiles.items[randomNumber].x;
+            var y = floorTiles.items[randomNumber].y;
 
-        // place box in a random location
-        self.children.items[self.children.items.len - 1].map.rows.items[y].items[x].tex = soko.TexType.box;
+            if (x == 0 or x >= newMap.rows.items[y].items.len) continue;
+            if (y == 0 or y >= newMap.rows.items.len) continue;
 
-        // save box location
-        self.children.items[self.children.items.len - 1].boxesPlaced += 1;
-        self.children.items[self.children.items.len - 1].action = NodeActionSet.placeBox;
+            // place box in a random location
+            newMap.rows.items[y].items[x].tex = .box;
+
+            // ensure that box placed can move
+            if (!Node.canAllBoxesMove(newMap)) {
+                newMap.rows.items[y].items[x].tex = .floor;
+                _ = floorTiles.swapRemove(randomNumber);
+                if (floorTiles.items.len != 0) {
+                    try floorTiles.resize(floorTiles.items.len - 1);
+                } else {
+                    //floorTiles.clearAndFree();
+                }
+                //log.warn("hello {}", .{floorTiles.items.len});
+                continue;
+            }
+
+            // create a new node
+            try self.appendChild(newMap);
+            var newSelf = self.children.items[self.children.items.len - 1];
+
+            // save box stats
+            newSelf.boxesPlaced += 1;
+            newSelf.action = NodeActionSet.placeBox;
+
+            break;
+        }
     }
 
     /// stops the editing of the map state for the current tree branch
@@ -387,44 +430,150 @@ pub const Node = struct {
     }
 
     /// move agent randomly until all boxes are moved
+    /// doesn't physically move agent, but rather gets list movable boxes and
+    /// moves them all, one position each.
+    const BoxMove = struct { tex: soko.Textile, act: soko.ActType };
     pub fn moveAgent(self: *Node) !void {
+        if (!Node.canAllBoxesMove(self.map)) return;
+        var puzzle = Puzzle.init(self.alloc, (try self.map.clone()).*);
+        defer puzzle.deinit();
+
         // reject creation of a move node if we can't move boxes
         // stops player mania when a box can't be moved.
-        if (!self.canAllBoxesMove()) return;
-
-        var puzzle = Puzzle.init(self.alloc, try self.map.clone().*);
-        defer puzzle.deinit();
+        var boxMoves = try Node.getAllBoxMoves(self.alloc, self.map);
+        if (boxMoves.items.len == 0) return;
 
         var initialBoxPositions = self.map.getBoxPositions();
         defer initialBoxPositions.deinit();
 
-        var randomNumber = rnd.random().intRangeAtMost(usize, 0, 3);
-        while (!Node.areAllBoxesMoved(puzzle, initialBoxPositions)) {
+        //try puzzle.map.buildDisplayed();
+        //log.warn("hello\n{s}", .{puzzle.map.displayed.items});
+        while (!Node.areAllBoxesMoved(&puzzle.map, initialBoxPositions) and Node.canAtleastOneBoxMove(&puzzle.map)) {
+            try puzzle.map.buildDisplayed();
+            log.warn("\n{s}", .{puzzle.map.displayed.items});
+            var randomNumber = rnd.random().intRangeAtMost(usize, 0, 3);
             switch (randomNumber) {
-                0 => puzzle.move(soko.ActType.up),
-                1 => puzzle.move(soko.ActType.down),
-                2 => puzzle.move(soko.ActType.left),
-                3 => puzzle.move(soko.ActType.right),
+                0 => puzzle.move(soko.ActType.up) catch {},
+                1 => puzzle.move(soko.ActType.down) catch {},
+                2 => puzzle.move(soko.ActType.left) catch {},
+                3 => puzzle.move(soko.ActType.right) catch {},
+                else => {},
             }
         }
+
+        try self.appendFreezedChild(try puzzle.map.clone());
+        var newSelf = self.children.items[self.children.items.len - 1];
+        newSelf.action = .moveAgent;
+
+        // after moving agent, evaluate.
+        // enter phase 4
+        if (Node.areAllBoxesMoved(newSelf.map, newSelf.freezedBoxPos)) {
+            // fruitless to evaluate without moved boxes
+            try newSelf.appendFreezedChild(newSelf.map);
+            try newSelf.children.items[self.children.items.len - 1].evaluateLevel();
+        }
+    }
+
+    fn canAtleastOneBoxMove(map: *Map) bool {
+        var boxPositions = map.getBoxPositions();
+        for (boxPositions.keys()) |id| {
+            if (boxPositions.get(id)) |pos| {
+
+                // check horizontal
+                if (pos.x > 0 and pos.x < map.rows.items[0].items.len - 1) {
+                    if ((map.rows.items[pos.y].items[pos.x - 1].tex == .floor or
+                        map.rows.items[pos.y].items[pos.x - 1].tex == .worker or
+                        map.rows.items[pos.y].items[pos.x - 1].tex == .workerDocked) and
+                        (map.rows.items[pos.y].items[pos.x + 1].tex == .floor or
+                        map.rows.items[pos.y].items[pos.x + 1].tex == .worker or
+                        map.rows.items[pos.y].items[pos.x + 1].tex == .workerDocked))
+                        return true;
+                }
+
+                // check vertical
+                if (pos.y > 0 and pos.y < map.rows.items.len - 1) {
+                    if ((map.rows.items[pos.y - 1].items[pos.x].tex == .floor or
+                        map.rows.items[pos.y - 1].items[pos.x].tex == .worker or
+                        map.rows.items[pos.y - 1].items[pos.x].tex == .workerDocked) and
+                        (map.rows.items[pos.y + 1].items[pos.x].tex == .floor or
+                        map.rows.items[pos.y + 1].items[pos.x].tex == .worker or
+                        map.rows.items[pos.y + 1].items[pos.x].tex == .workerDocked))
+                        return true;
+                }
+            }
+        }
+        return false;
     }
 
     fn canAllBoxesMove(map: *Map) bool {
-        const maxI = map.rows.items.len;
-        for (map.rows.items) |rows, i| {
-            for (rows.items) |item, j| {
-                if (item != .box) continue;
+        var boxPositions = map.getBoxPositions();
+        for (boxPositions.keys()) |id| {
+            if (boxPositions.get(id)) |pos| {
+                var isBoxMovable = false;
 
-                const maxJ = rows.items.len;
-                if (i == maxI and j == maxJ) return false;
-                if (i == 0 and j == 0) return false;
+                // check horizontal
+                if (pos.x > 0 and pos.x < map.rows.items[0].items.len - 1) {
+                    if ((map.rows.items[pos.y].items[pos.x - 1].tex == .floor or
+                        map.rows.items[pos.y].items[pos.x - 1].tex == .worker or
+                        map.rows.items[pos.y].items[pos.x - 1].tex == .workerDocked) and
+                        (map.rows.items[pos.y].items[pos.x + 1].tex == .floor or
+                        map.rows.items[pos.y].items[pos.x + 1].tex == .worker or
+                        map.rows.items[pos.y].items[pos.x + 1].tex == .workerDocked))
+                        isBoxMovable = true;
+                }
+
+                // check vertical
+                if (pos.y > 0 and pos.y < map.rows.items.len - 1) {
+                    if ((map.rows.items[pos.y - 1].items[pos.x].tex == .floor or
+                        map.rows.items[pos.y - 1].items[pos.x].tex == .worker or
+                        map.rows.items[pos.y - 1].items[pos.x].tex == .workerDocked) and
+                        (map.rows.items[pos.y + 1].items[pos.x].tex == .floor or
+                        map.rows.items[pos.y + 1].items[pos.x].tex == .worker or
+                        map.rows.items[pos.y + 1].items[pos.x].tex == .workerDocked))
+                        isBoxMovable = true;
+                }
+
+                if (!isBoxMovable) return false;
             }
         }
-        _ = map;
+        return true;
     }
 
-    fn areAllBoxesMoved(puzzle: Puzzle, initialBoxPos: std.AutoArrayHashMap(u8, soko.Pos)) bool {
-        var currentBoxPositions = puzzle.map.getBoxPositions();
+    fn getAllBoxMoves(alloc: Allocator, map: *Map) !std.ArrayList(BoxMove) {
+        var resultMoves = std.ArrayList(BoxMove).init(alloc);
+        const maxI = map.rows.items.len - 1;
+        for (map.rows.items) |row, i| {
+            for (row.items) |item, j| {
+                if (item.tex != .box) continue;
+
+                const maxJ = row.items.len - 1;
+                if (i == maxI and j == maxJ) continue;
+                if (i == 0 and j == 0) continue;
+                if (i == 0 and j == maxJ) continue;
+                if (i == maxI and j == 0) continue;
+
+                // check horizontal
+                if (j > 0 and j < row.items.len) {
+                    if (row.items[j - 1].tex == .floor and row.items[j + 1].tex == .floor) {
+                        try resultMoves.append(BoxMove{ .tex = item, .act = .right });
+                        try resultMoves.append(BoxMove{ .tex = item, .act = .left });
+                    }
+                }
+
+                // check vertical
+                if (i > 0 and i < map.rows.items.len) {
+                    if (map.rows.items[i - 1].items[j].tex == .floor and map.rows.items[i + 1].items[j].tex == .floor) {
+                        try resultMoves.append(BoxMove{ .tex = item, .act = .up });
+                        try resultMoves.append(BoxMove{ .tex = item, .act = .down });
+                    }
+                }
+            }
+        }
+        return resultMoves;
+    }
+
+    fn areAllBoxesMoved(map: *Map, initialBoxPos: std.AutoArrayHashMap(u8, soko.Pos)) bool {
+        var currentBoxPositions = map.getBoxPositions();
         for (currentBoxPositions.keys()) |key| {
             if (currentBoxPositions.get(key)) |finalPos|
                 if (initialBoxPos.get(key)) |initialPos|
