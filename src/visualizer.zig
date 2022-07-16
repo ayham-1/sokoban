@@ -2,9 +2,9 @@ const std = @import("std");
 const log = @import("log.zig");
 const raylib = @import("./raylib/raylib.zig");
 const soko = @import("constants.zig");
-const Gen = @import("generator.zig");
-const Node = Gen.Node;
-const NodeActionSet = Gen.NodeActionSet;
+const nodezig = @import("generator/node.zig");
+const Node = nodezig.Node;
+const NodeActionSet = nodezig.NodeActionSet;
 const Map = @import("map.zig").Map;
 
 const ZecsiAllocator = @import("allocator.zig").ZecsiAllocator;
@@ -57,7 +57,7 @@ fn init() void {
     map.sizeHeight = @intCast(i32, levelSize);
     map.sizeWidth = @intCast(i32, levelSize);
 
-    Gen.generatedPuzzles = std.ArrayList(Gen.GeneratedPuzzle).init(alloc);
+    nodezig.generatedPuzzles = std.ArrayList(nodezig.GeneratedPuzzle).init(alloc);
     parentNode = Node.initAsParent(alloc, map, boxCount);
 }
 
