@@ -1,8 +1,8 @@
 const std = @import("std");
-const raylib = @import("raylib/raylib.zig");
+//const raylib = @import("raylib/raylib.zig");
 
 const game = @import("game.zig");
-const generator = @import("generator.zig");
+const generator = @import("generator/generator.zig");
 const soko = @import("constants.zig");
 const Map = @import("map.zig").Map;
 
@@ -30,13 +30,15 @@ pub fn main() anyerror!void {
     //var map = Map.init(alloc);
     //try map.build(gameMap);
 
-    var map = try generator.get(alloc, 8, 4, 4500);
-    defer map.deinit();
+    //var map = generator.get(alloc, 8, 8, 500);
+    //defer map.deinit();
+    //
+    generator.get(alloc, 8, 8, 100);
 
-    try game.start(map.*);
+    //try game.start(map.*);
     //defer game.stop();
 
-    while (!raylib.WindowShouldClose() and !game.won) {
-        game.loop(raylib.GetFrameTime());
-    }
+    //while (!raylib.WindowShouldClose() and !game.won) {
+    //    game.loop(raylib.GetFrameTime());
+    //}
 }

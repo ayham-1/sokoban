@@ -6,7 +6,6 @@ pub const mapBorder: i32 = 6;
 
 pub const MapRowArray = std.ArrayList(Textile);
 pub const MapArray = std.ArrayList(MapRowArray);
-pub const TexId = u8;
 
 pub const MapError = error{MapError};
 pub const InvalidPos = error{InvalidPos};
@@ -42,7 +41,7 @@ pub const TexType = enum(u8) {
 };
 
 pub const ActType = enum(u5) { up, down, left, right, none };
-pub const Pos = struct { x: usize, y: usize };
+pub const Pos = struct { x: u8, y: u8 };
 pub const IdPos = struct { id: u8, pos: Pos };
 
 pub const BoxGoalPair = struct {

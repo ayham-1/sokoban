@@ -6,19 +6,19 @@ const Allocator = std.mem.Allocator;
 pub const Map = struct {
     alloc: Allocator,
     rows: soko.MapArray,
-    highestId: soko.TexId = 1,
+    highestId: u8 = 1,
     displayed: std.ArrayList(u8) = undefined,
     sizeWidth: i32 = 0,
     sizeHeight: i32 = 0,
     workerPos: soko.Pos = undefined,
-    boxPos: std.AutoArrayHashMap(soko.TexId, soko.Pos),
+    boxPos: std.AutoArrayHashMap(u8, soko.Pos),
 
     pub fn init(alloc: Allocator) Map {
         var map = Map{
             .alloc = alloc,
             .rows = soko.MapArray.init(alloc),
             .displayed = std.ArrayList(u8).init(alloc),
-            .boxPos = std.AutoArrayHashMap(soko.TexId, soko.Pos).init(alloc),
+            .boxPos = std.AutoArrayHashMap(u8, soko.Pos).init(alloc),
         };
 
         // find worker pos
@@ -100,7 +100,7 @@ pub const Map = struct {
         for (self.rows.items) |row, i| {
             for (row.items) |item, j| {
                 switch (item.tex) {
-                    .box, .boxDocked => self.boxPos.put(item.id, soko.Pos{ .x = j, .y = i }) catch unreachable,
+                    .box, .boxDocked => self.boxPos.put(item.id, soko.Pos{ .x = @intCast(u8, j), .y = @intCast(u8, i) }) catch unreachable,
                     else => {},
                 }
             }
@@ -111,7 +111,8 @@ pub const Map = struct {
         for (self.rows.items) |row, i| {
             for (row.items) |item, j| {
                 if (item.tex == .worker) {
-                    self.workerPos = soko.Pos{ .x = j, .y = i };
+                    self.workerPos = soko.Pos{ .x = @intCast(u8, j), .y = @intCast(u8, i) };
+                    return;
                 }
             }
         }

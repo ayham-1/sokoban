@@ -179,11 +179,11 @@ pub fn build(b: *std.build.Builder) !void {
 
             const rayBuild = @import("src/raylib/raylib/src/build.zig");
             const raylib = rayBuild.addRaylib(b, target);
-            exe.linkLibrary(raylib);
-            exe.addIncludeDir(raylibSrc);
-            exe.addIncludeDir(raylibSrc ++ "extras/");
-            exe.addIncludeDir(bindingSrc);
-            exe.addCSourceFile(bindingSrc ++ "marshal.c", &.{});
+            //exe.linkLibrary(raylib);
+            //exe.addIncludeDir(raylibSrc);
+            //exe.addIncludeDir(raylibSrc ++ "extras/");
+            //exe.addIncludeDir(bindingSrc);
+            //exe.addCSourceFile(bindingSrc ++ "marshal.c", &.{});
             exe.linkLibC();
             exe.install();
 

@@ -4,7 +4,8 @@ const raylib = @import("./raylib/raylib.zig");
 const soko = @import("constants.zig");
 const nodezig = @import("generator/node.zig");
 const Node = nodezig.Node;
-const NodeActionSet = nodezig.NodeActionSet;
+const NodeState = @import("generator/nodestate.zig").NodeState;
+const mcts = @import("generator/mcts.zig").mcts;
 const Map = @import("map.zig").Map;
 
 const ZecsiAllocator = @import("allocator.zig").ZecsiAllocator;
@@ -56,20 +57,13 @@ fn init() void {
     map.buildDisplayed() catch unreachable;
     map.sizeHeight = @intCast(i32, levelSize);
     map.sizeWidth = @intCast(i32, levelSize);
-
-    nodezig.generatedPuzzles = std.ArrayList(nodezig.GeneratedPuzzle).init(alloc);
-    parentNode = Node.initAsParent(alloc, map, boxCount);
 }
 
 pub fn main() !void {
     init();
     if (std.os.argv.len > 1) {
-        var iterateTimes: usize = try std.fmt.parseInt(usize, try std.fmt.allocPrint(alloc, "{s}", .{std.os.argv[1]}), 10);
-        while (iterateTimes > 0) {
-            try parentNode.iterate();
-            iterateTimes -= 1;
-            log.info("epochs left: {}", .{iterateTimes});
-        }
+        var iterateTimes: i64 = try std.fmt.parseInt(i64, try std.fmt.allocPrint(alloc, "{s}", .{std.os.argv[1]}), 10);
+        parentNode = mcts(parentNode, iterateTimes, 1);
     }
     raylib.InitWindow(screenWidth, screenHeight, "Sokoban Puzzle Generator Visualizer");
     raylib.SetConfigFlags(.FLAG_WINDOW_RESIZABLE);
@@ -104,7 +98,7 @@ pub fn main() !void {
             parentNodeVis = NodeVis.init(arena.allocator(), parentNode);
             parentNodeVis.positionTree(0.25, 0.25);
             drawCard(parentNodeVis, 0);
-            //arena.deinit();
+            arena.deinit();
         }
 
         // update
@@ -123,7 +117,7 @@ pub fn main() !void {
                 camera2D.target = raylib.GetScreenToWorld2D(raylib.Vector2Add(camera2D.offset, delta), camera2D);
 
             if (raylib.IsKeyPressed(.KEY_SPACE)) {
-                parentNode.iterate() catch unreachable;
+                //parentNode.iterate() catch unreachable;
             }
 
             if (raylib.IsKeyDown(.KEY_Z))
@@ -407,8 +401,8 @@ pub fn drawCard(nodeVis: *NodeVis, nodeNum: usize) void {
     if (node.parent != null and node.totalEvaluation > highestEval) highestEval = node.totalEvaluation;
     raylib.DrawRectangleLinesEx(rectLine, 5, raylib.RED);
 
-    if (node.action == NodeActionSet.evaluateLevel)
-        raylib.DrawRectangleLinesEx(rectLine, 5, raylib.GREEN);
+    //if (node.action == NodeActionSet.evaluateLevel)
+    //raylib.DrawRectangleLinesEx(rectLine, 5, raylib.GREEN);
 
     // draw title
     var nodeTitle = std.ArrayList(u8).init(std.heap.c_allocator);
@@ -431,9 +425,10 @@ pub fn drawCard(nodeVis: *NodeVis, nodeNum: usize) void {
     // draw displayed map
     var map = std.ArrayList(u8).init(std.heap.c_allocator);
     defer map.deinit();
-    node.map.buildDisplayed() catch unreachable;
+    var builtMap = node.state.buildMap();
+    builtMap.buildDisplayed() catch unreachable;
     //log.warn("node: {d}\n{s}\n{*}", .{ nodeNum, node.map.displayed.items, node.map.displayed.items });
-    map.appendSlice(node.map.displayed.items) catch unreachable;
+    map.appendSlice(builtMap.displayed.items) catch unreachable;
     map.append(0) catch unreachable;
     var mapText = @ptrCast([*:0]const u8, map.items);
     var mapX = cardXCenter - @divFloor(raylib.MeasureText(mapText, @floatToInt(i32, fontSize)), 2);
@@ -491,13 +486,13 @@ pub fn drawCard(nodeVis: *NodeVis, nodeNum: usize) void {
     var action = std.ArrayList(u8).init(std.heap.c_allocator);
     defer action.deinit();
     action.appendSlice("self.action = ") catch unreachable;
-    switch (node.action) {
-        .root => action.appendSlice("rootNode") catch unreachable,
-        .deleteWall => action.appendSlice("deleteWall") catch unreachable,
-        .placeBox => action.appendSlice("placeBox") catch unreachable,
-        .freezeLevel => action.appendSlice("freezeLevel") catch unreachable,
-        .moveAgent => action.appendSlice("moveAgent") catch unreachable,
-        .evaluateLevel => action.appendSlice("evaluateLevel") catch unreachable,
+    switch (node.state.action) {
+        NodeState.moveBox => action.appendSlice("moveBox") catch unreachable,
+        NodeState.evaluate => action.appendSlice("evaluate") catch unreachable,
+        NodeState.placeBox => action.appendSlice("placeBox") catch unreachable,
+        NodeState.placeFloor => action.appendSlice("placeFloor") catch unreachable,
+        NodeState.placePlayer => action.appendSlice("placePlayer") catch unreachable,
+        else => action.appendSlice("nill") catch unreachable,
     }
     action.append(0) catch unreachable;
     var actionText = @ptrCast([*:0]const u8, action.items);
