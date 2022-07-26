@@ -138,3 +138,4 @@ tags
 zig-cache/
 zig-out/
 callgrind*
+.gdb_history

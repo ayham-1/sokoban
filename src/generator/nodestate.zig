@@ -38,7 +38,7 @@ pub const NodeState = struct {
     width: u8,
     height: u8,
 
-    action: ActionFn,
+    action: Action,
     nextActions: std.ArrayList(Action),
     evaluated: bool = false,
 
@@ -50,11 +50,22 @@ pub const NodeState = struct {
     boxMoveCount: std.ArrayList(i16), // boxIndex, moves
 
     pub fn init(alloc: Allocator, width: u8, height: u8) *NodeState {
+        // plot random floor tile
+        std.os.getrandom(std.mem.asBytes(&seed)) catch unreachable;
+        rnd = RndGen.init(seed);
+        var x = rnd.random().intRangeAtMost(u8, 1, width - 1);
+        var y = rnd.random().intRangeAtMost(u8, 1, height - 1);
+        var pos = soko.Pos{ .x = x, .y = y };
+        var floorAct = Action{
+            .func = placeFloor,
+            .params = ActionParams{ .pos = pos, .boxIndex = null, .direction = null },
+        };
+
         var state = NodeState{
             .alloc = alloc,
             .width = width,
             .height = height,
-            .action = NodeState.placeFloor,
+            .action = floorAct,
             .nextActions = std.ArrayList(Action).init(alloc),
             .floors = std.ArrayList(soko.Pos).init(alloc),
             .boxes = std.ArrayList(soko.Pos).init(alloc),
@@ -64,16 +75,7 @@ pub const NodeState = struct {
             .goals = std.ArrayList(soko.Pos).init(alloc),
         };
 
-        // plot random floor tile
-        std.os.getrandom(std.mem.asBytes(&seed)) catch unreachable;
-        rnd = RndGen.init(seed);
-        var x = rnd.random().intRangeAtMost(u8, 1, width - 1);
-        var y = rnd.random().intRangeAtMost(u8, 1, height - 1);
-        var pos = soko.Pos{ .x = x, .y = y };
-        state.nextActions.append(Action{
-            .func = placeFloor,
-            .params = ActionParams{ .pos = pos, .boxIndex = null, .direction = null },
-        }) catch unreachable;
+        state.nextActions.append(floorAct) catch unreachable;
 
         var allocState: *NodeState = alloc.create(NodeState) catch unreachable;
         allocState.* = state;
@@ -89,14 +91,23 @@ pub const NodeState = struct {
     }
 
     pub fn clone(self: *NodeState) !*NodeState {
-        var result = NodeState.init(self.alloc, self.width, self.height);
-        result.floors = try self.floors.clone();
-        result.boxes = try self.boxes.clone();
-        result.obstacles = try self.obstacles.clone();
-        result.boxMoveCount = try self.boxMoveCount.clone();
-        result.playerReach = try self.playerReach.clone();
-        result.boxes = try self.boxes.clone();
-        return result;
+        var result = NodeState{
+            .alloc = self.alloc,
+            .action = undefined,
+            .width = self.width,
+            .height = self.height,
+            .floors = try self.floors.clone(),
+            .boxes = try self.boxes.clone(),
+            .obstacles = try self.obstacles.clone(),
+            .goals = try self.goals.clone(),
+            .boxMoveCount = try self.boxMoveCount.clone(),
+            .playerReach = try self.playerReach.clone(),
+            .nextActions = std.ArrayList(Action).init(self.alloc),
+        };
+
+        var cloneAlloc = self.alloc.create(NodeState) catch unreachable;
+        cloneAlloc.* = result;
+        return cloneAlloc;
     }
 
     pub fn hash(self: NodeState) u64 {
@@ -122,11 +133,12 @@ pub const NodeState = struct {
             }
         }
 
+        log.warn("preProcess: {s}", .{self.floors.items});
         var processed = NodeState{
             .alloc = self.alloc,
+            .action = undefined,
             .width = self.width,
             .height = self.height,
-            .action = NodeState.placeFloor,
             .nextActions = std.ArrayList(Action).init(self.alloc),
             .boxes = boxes,
             .floors = std.ArrayList(soko.Pos).init(self.alloc),
@@ -140,6 +152,7 @@ pub const NodeState = struct {
             processed.playerReach = processed.getReachFrom(popped);
         }
         processed.floors = processed.playerReach.clone() catch unreachable;
+        log.warn("processed: {s}", .{processed.floors.items});
 
         return processed;
     }
@@ -151,14 +164,16 @@ pub const NodeState = struct {
         var newRow = std.ArrayList(soko.Textile).initCapacity(self.alloc, self.width) catch unreachable;
         var i: usize = 0;
         while (i < self.width) {
+            defer i += 1;
             newRow.append(soko.Textile{
-                .tex = .floor,
+                .tex = .none,
                 .id = 0,
             }) catch unreachable;
         }
 
         i = 0;
         while (i < self.height) {
+            defer i += 1;
             rows.append(newRow.clone() catch unreachable) catch unreachable;
         }
 
@@ -166,15 +181,17 @@ pub const NodeState = struct {
             rows.items[floor.y].items[floor.x] = soko.Textile{ .tex = .floor, .id = map.highestId };
             map.highestId += 1;
         }
-        for (self.obstacles.items) |obstacle| {
-            rows.items[obstacle.y].items[obstacle.x] = soko.Textile{ .tex = .wall, .id = map.highestId };
-            map.highestId += 1;
-        }
         for (self.goals.items) |goal| {
             rows.items[goal.y].items[goal.x] = soko.Textile{ .tex = .dock, .id = map.highestId };
             map.highestId += 1;
         }
+        for (self.obstacles.items) |obstacle| {
+            rows.items[obstacle.y].items[obstacle.x] = soko.Textile{ .tex = .wall, .id = map.highestId };
+            map.highestId += 1;
+        }
 
+        map.rows.deinit();
+        map.rows = rows.clone() catch unreachable;
         var mapAlloc = self.alloc.create(Map) catch unreachable;
         mapAlloc.* = map;
 
@@ -182,46 +199,37 @@ pub const NodeState = struct {
     }
 
     pub fn simulate(self: *NodeState) void {
-        var randomChild = rnd.random().intRangeAtMost(usize, 0, self.nextActions.items.len - 1);
-        var action = self.nextActions.items[randomChild];
-        action.func(self, action.params);
-        self.action = action.func;
-        //randomChild.deinit();
-        if (self.nextActions.items.len > 1) {
-            self.nextActions.resize(self.nextActions.items.len - 1) catch unreachable;
-        } else {
-            self.nextActions.clearAndFree();
-        }
+        self.action.func(self, self.action.params);
     }
-    /// assumes first argument is position
-    pub fn placeBox(self: *NodeState, args: ActionParams) void {
-        var pos = args.pos.?;
-        if (!self.testPosBoundaries(pos)) return;
 
-        self.boxes.append(pos) catch unreachable;
-        self.goals.append(pos) catch unreachable;
-        self.boxMoveCount.append(0) catch unreachable;
-        for (self.floors.items) |floor, i| {
+    /// assumes first argument is position
+    pub fn placeBox(node: *NodeState, args: ActionParams) void {
+        var pos = args.pos.?;
+        if (!node.testPosBoundaries(pos)) return;
+
+        node.boxes.append(pos) catch unreachable;
+        node.goals.append(pos) catch unreachable;
+        node.boxMoveCount.append(0) catch unreachable;
+        for (node.floors.items) |floor, i| {
             if (std.meta.eql(pos, floor)) {
-                _ = self.floors.swapRemove(i);
-                if (self.floors.items.len > 0) {
-                    self.floors.resize(self.floors.items.len - 1) catch unreachable;
+                if (node.floors.items.len > 0) {
+                    _ = node.floors.swapRemove(i);
+                    node.floors.resize(node.floors.items.len - 1) catch unreachable;
                 } else {
-                    self.floors.clearAndFree();
+                    node.floors.clearAndFree();
                 }
                 break;
             }
         }
-
-        for (self.nextActions.items) |action, i| {
+        for (node.nextActions.items) |action, i| {
             if (action.func == placePlayer) {
                 if (action.params.pos) |posPlayer| {
                     if (std.meta.eql(posPlayer, pos)) {
-                        _ = self.nextActions.swapRemove(i);
-                        if (self.nextActions.items.len > 1) {
-                            self.nextActions.resize(self.nextActions.items.len - 1) catch unreachable;
+                        _ = node.nextActions.swapRemove(i);
+                        if (node.nextActions.items.len > 1) {
+                            node.nextActions.resize(node.nextActions.items.len - 1) catch unreachable;
                         } else {
-                            self.nextActions.clearAndFree();
+                            node.nextActions.clearAndFree();
                         }
                     }
                 }
@@ -234,94 +242,104 @@ pub const NodeState = struct {
     /// places floor, then adds more actions:
     ///     - placeBox
     ///     - placePlayer
-    pub fn placeFloor(self: *NodeState, args: ActionParams) void {
+    pub fn placeFloor(node: *NodeState, args: ActionParams) void {
         var pos = args.pos.?;
 
-        if (!self.testPosBoundaries(pos)) return;
+        if (!node.testPosBoundaries(pos)) return;
 
-        self.floors.append(pos) catch unreachable;
+        node.floors.append(pos) catch unreachable;
 
-        for (self.obstacles.items) |obstacle, i| {
+        for (node.obstacles.items) |obstacle, i| {
             if (std.meta.eql(pos, obstacle)) {
-                _ = self.obstacles.swapRemove(i);
-                if (self.obstacles.items.len > 0) {
-                    self.obstacles.resize(self.obstacles.items.len - 1) catch unreachable;
+                _ = node.obstacles.swapRemove(i);
+                if (node.obstacles.items.len > 0) {
+                    node.obstacles.resize(node.obstacles.items.len - 1) catch unreachable;
                 } else {
-                    self.obstacles.clearAndFree();
+                    node.obstacles.clearAndFree();
                 }
             }
         }
         for (directions) |dir| {
-            var newPos = self.movePos(pos, dir);
+            var newPos = node.movePos(pos, dir);
             var isValid = true;
-            for (self.boxes.items) |box| {
-                if (std.meta.eql(pos, box)) isValid = false;
+            for (node.boxes.items) |box| {
+                if (std.meta.eql(pos, box)) {
+                    isValid = false;
+                    break;
+                }
+            }
+            for (node.floors.items) |floor| {
+                if (std.meta.eql(pos, floor)) {
+                    isValid = false;
+                    break;
+                }
             }
 
-            if (isValid)
-                self.nextActions.append(Action{
+            if (isValid) {
+                node.nextActions.append(Action{
                     .func = placeFloor,
-                    .params = ActionParams{ .pos = newPos, .boxIndex = 0, .direction = dir },
+                    .params = ActionParams{ .pos = newPos, .boxIndex = null, .direction = null },
                 }) catch unreachable;
+            }
         }
-        self.nextActions.append(Action{
+        node.nextActions.append(Action{
             .func = placeBox,
             .params = ActionParams{ .pos = pos, .boxIndex = null, .direction = null },
         }) catch unreachable;
-        self.nextActions.append(Action{
+        node.nextActions.append(Action{
             .func = placePlayer,
             .params = ActionParams{ .pos = pos, .boxIndex = null, .direction = null },
         }) catch unreachable;
     }
 
     /// assumes first argument is position
-    pub fn placePlayer(self: *NodeState, args: ActionParams) void {
+    pub fn placePlayer(node: *NodeState, args: ActionParams) void {
         var pos = args.pos.?;
-        if (!self.testPosBoundaries(pos)) unreachable;
+        if (!node.testPosBoundaries(pos)) unreachable;
 
-        self.playerReach = self.getReachFrom(pos);
-        self.goals = self.boxes.clone() catch unreachable;
-        self.nextActions.clearAndFree();
-        self.nextActions.append(Action{
+        node.playerReach = node.getReachFrom(pos);
+        node.goals = node.boxes.clone() catch unreachable;
+        node.nextActions.clearAndFree();
+        node.nextActions.append(Action{
             .func = evaluate,
             .params = ActionParams{ .pos = null, .boxIndex = null, .direction = null },
         }) catch unreachable;
 
-        self.appendBoxMoves();
+        node.appendBoxMoves();
     }
 
     /// assumes second argument is boxIndex
     /// assumes third argument is direction
-    pub fn moveBox(self: *NodeState, args: ActionParams) void {
+    pub fn moveBox(node: *NodeState, args: ActionParams) void {
         var boxIndex = args.boxIndex.?;
         var direction = args.direction.?;
 
-        var boxOldPos = self.boxes.items[boxIndex];
-        self.floors.append(boxOldPos) catch unreachable;
-        var boxNewPos = self.movePos(boxOldPos, direction);
+        var boxOldPos = node.boxes.items[boxIndex];
+        node.floors.append(boxOldPos) catch unreachable;
+        var boxNewPos = node.movePos(boxOldPos, direction);
 
-        for (self.floors.items) |floor, i| {
+        for (node.floors.items) |floor, i| {
             if (std.meta.eql(boxNewPos, floor)) {
-                _ = self.floors.swapRemove(i);
-                if (self.floors.items.len > 0) {
-                    self.floors.resize(self.obstacles.items.len - 1) catch unreachable;
+                _ = node.floors.swapRemove(i);
+                if (node.floors.items.len > 1) {
+                    node.floors.resize(node.floors.items.len - 1) catch unreachable;
                 } else {
-                    self.floors.clearAndFree();
+                    node.floors.clearAndFree();
                 }
             }
         }
 
-        self.boxes.items[boxIndex] = boxNewPos;
-        self.playerReach = self.getReachFrom(self.movePos(boxNewPos, direction));
-        self.boxMoveCount.items[boxIndex] += 1;
+        node.boxes.items[boxIndex] = boxNewPos;
+        node.playerReach = node.getReachFrom(node.movePos(boxNewPos, direction));
+        node.boxMoveCount.items[boxIndex] += 1;
 
-        self.appendBoxMoves();
+        node.appendBoxMoves();
     }
 
-    pub fn evaluate(self: *NodeState, args: ActionParams) void {
+    pub fn evaluate(node: *NodeState, args: ActionParams) void {
         _ = args;
-        self.evaluated = true;
-        self.nextActions.clearAndFree();
+        node.evaluated = true;
+        node.nextActions.clearAndFree();
     }
 
     pub fn getReachFrom(self: *NodeState, pos: soko.Pos) std.ArrayList(soko.Pos) {
@@ -346,11 +364,30 @@ pub const NodeState = struct {
         }
         return reach;
     }
-    pub fn movePos(self: *NodeState, pos: soko.Pos, direction: [2]i2) soko.Pos {
-        var newX = @intCast(i16, pos.x) + direction[0];
-        var newY = @intCast(i16, pos.y) + direction[1];
+    fn movePos(self: *NodeState, pos: soko.Pos, direction: u2) soko.Pos {
+        var newX: u8 = 0;
+        var newY: u8 = 0;
+        switch (direction) {
+            0 => {
+                newX = pos.x;
+                newY = pos.y - 1;
+            }, // up
+            1 => {
+                newX += pos.x + 1;
+                newY = pos.y;
+            }, // right
+            2 => {
+                newX = pos.x;
+                newY = pos.y + 1;
+            }, // down
+            3 => {
+                newX = pos.x - 1;
+                newY = pos.y;
+            }, // left
+        }
         if (newX >= 0 and newY >= 0 and newX < self.width and newY < self.height) {
-            return soko.Pos{ .x = @intCast(u8, @intCast(i16, pos.x) + direction[0]), .y = @intCast(u8, (@intCast(i16, pos.y) + direction[1])) };
+            log.warn("x: {}, y: {}", .{ newX, newY });
+            return soko.Pos{ .x = newX, .y = newY };
         } else {
             return pos;
         }
@@ -391,14 +428,12 @@ pub const Action = struct {
     params: ActionParams,
     func: ActionFn,
 };
-pub const ActionParams = struct { pos: ?soko.Pos, boxIndex: ?usize, direction: ?[2]i2 };
+pub const ActionParams = struct { pos: ?soko.Pos, boxIndex: ?usize, direction: ?u2 };
 pub const ActionFn = fn (self: *NodeState, args: ActionParams) void;
 
-// Useful Functions
-//
-pub var directions = [4][2]i2{
-    [_]i2{ 0, -1 }, // up
-    [_]i2{ 1, 0 }, // right
-    [_]i2{ 0, 1 }, // down
-    [_]i2{ -1, 0 }, // left
+pub var directions = [4]u2{
+    0, // up
+    1, // right
+    2, // down
+    3, // left
 };

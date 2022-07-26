@@ -6,10 +6,9 @@ const Node = @import("node.zig").Node;
 
 const Allocator = std.mem.Allocator;
 
-pub fn mcts(node: *Node, epoch: i64, percentChild: f16) *Node {
+pub fn mcts(node: *Node, epoch: i64) *Node {
     var bestNode = node;
     var bestScore: f32 = std.math.f32_min;
-    var simulated = node;
 
     var epochsLeft: i64 = epoch;
     var startTime: i64 = std.time.timestamp();
@@ -20,31 +19,24 @@ pub fn mcts(node: *Node, epoch: i64, percentChild: f16) *Node {
         var timestamp = std.time.nanoTimestamp();
 
         var selected = node.select();
-        var childrenCount: usize = @floatToInt(usize, (percentChild * @intToFloat(f16, (selected.children.items.len))));
-        selected.expand() catch unreachable;
-
-        var rand = std.rand.DefaultPrng.init(@intCast(u64, std.time.milliTimestamp()));
-        var counter: usize = 0;
-        while (counter <= childrenCount) {
-            defer counter += 1;
-            if (selected.children.items.len == 0) {
+        if (selected.parent) |_| {
+            selected.state.simulate();
+            if (selected.visits == 0) {
                 selected.state.simulate();
                 selected.evalBackProp() catch unreachable;
-                simulated = selected.clone() catch unreachable;
-                selected.removeFromParent();
-                break;
             } else {
-                const num = rand.random().intRangeAtMost(usize, 0, selected.children.items.len - 1);
-                var child = selected.children.items[num].clone() catch unreachable;
-                child.state.simulate();
-                child.evalBackProp() catch unreachable;
-                simulated = child;
+                selected.expand() catch unreachable;
+                selected.evalBackProp() catch unreachable;
             }
+        } else {
+            selected.expand() catch unreachable;
+            selected.state.simulate();
+            selected.evalBackProp() catch unreachable;
+        }
 
-            if (simulated.totalEvaluation > bestScore) {
-                bestScore = simulated.totalEvaluation;
-                bestNode = simulated;
-            }
+        if (selected.totalEvaluation > bestScore) {
+            bestScore = selected.totalEvaluation;
+            bestNode = selected;
         }
 
         var timeTaken = std.time.nanoTimestamp() - timestamp;

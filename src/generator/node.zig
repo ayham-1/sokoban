@@ -48,22 +48,24 @@ pub const Node = struct {
         allocNode.* = node;
         return allocNode;
     }
-    pub fn clone(self: *Node) !*Node {
-        var node = Node{
-            .alloc = self.alloc,
-            .children = try self.children.clone(),
-            .state = try self.state.clone(),
-            .visitedHashes = self.visitedHashes,
-        };
 
-        var allocNode: *Node = try self.alloc.create(Node);
-        allocNode.* = node;
-        return allocNode;
-    }
+    //pub fn clone(self: *Node) !*Node {
+    //    var node = Node{
+    //        .alloc = self.alloc,
+    //        .children = try self.children.clone(),
+    //        .state = try self.state.clone(),
+    //        .visitedHashes = self.visitedHashes,
+    //    };
+
+    //    var allocNode: *Node = try self.alloc.create(Node);
+    //    allocNode.* = node;
+    //    return allocNode;
+    //}
 
     pub fn appendChild(self: *Node, state: *NodeState) void {
         var node = Node{
             .alloc = self.alloc,
+            .parent = self,
             .children = std.ArrayList(*Node).init(self.alloc),
             .state = state,
             .visitedHashes = self.visitedHashes,
@@ -91,7 +93,7 @@ pub const Node = struct {
         for (self.state.nextActions.items) |action| {
             var clonedState = try self.state.clone();
             defer clonedState.deinit();
-            action.func(clonedState, action.params);
+            clonedState.action = action;
 
             // make sure we don't revisit
             var childHash = clonedState.hash();
@@ -100,6 +102,7 @@ pub const Node = struct {
                     return;
             }
 
+            log.warn("expand: {s}", .{clonedState.floors.items});
             self.appendChild(clonedState);
         }
     }

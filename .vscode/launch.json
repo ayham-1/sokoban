@@ -11,13 +11,17 @@
             
         },
         {
-            "type": "lldb",
+            "type": "cppdbg",
             "request": "launch",
             "name": "Debug Visualizer",
-            "program": "zig",
-            "args": ["build", "visualizer"],
+            "program": "${workspaceFolder}/zig-out/bin/sokoban-vis",
+            "args": ["1"],
+            "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
-            
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "lldb",
+            "preLaunchTask": "build-vis"
         }
     ]
 }

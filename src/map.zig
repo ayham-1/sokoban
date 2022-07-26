@@ -21,9 +21,6 @@ pub const Map = struct {
             .boxPos = std.AutoArrayHashMap(u8, soko.Pos).init(alloc),
         };
 
-        // find worker pos
-        map.setWorkerPos();
-        map.setBoxPositions();
         return map;
     }
 
