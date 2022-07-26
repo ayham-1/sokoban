@@ -22,6 +22,8 @@ const computeMapEval = metricszig.computeMapEval;
 
 const Allocator = std.mem.Allocator;
 
+var visitedHashes: std.ArrayList(u64) = undefined;
+
 pub const Node = struct {
     alloc: Allocator,
     parent: ?*Node = null,
@@ -31,17 +33,14 @@ pub const Node = struct {
 
     visits: usize = 1,
     totalEvaluation: f32 = 0,
-
-    // shared between all nodes,
-    // never clone
-    visitedHashes: std.ArrayList(i64),
+    avgScore: f32 = 0,
 
     pub fn init(alloc: Allocator, state: *NodeState) *Node {
+        visitedHashes = std.ArrayList(u64).init(alloc);
         var node = Node{
             .alloc = alloc,
             .children = std.ArrayList(*Node).init(alloc),
             .state = state,
-            .visitedHashes = std.ArrayList(i64).init(alloc),
         };
 
         var allocNode: *Node = alloc.create(Node) catch unreachable;
@@ -49,18 +48,17 @@ pub const Node = struct {
         return allocNode;
     }
 
-    //pub fn clone(self: *Node) !*Node {
-    //    var node = Node{
-    //        .alloc = self.alloc,
-    //        .children = try self.children.clone(),
-    //        .state = try self.state.clone(),
-    //        .visitedHashes = self.visitedHashes,
-    //    };
+    pub fn clone(self: *Node) !*Node {
+        var node = Node{
+            .alloc = self.alloc,
+            .children = try self.children.clone(),
+            .state = try self.state.clone(),
+        };
 
-    //    var allocNode: *Node = try self.alloc.create(Node);
-    //    allocNode.* = node;
-    //    return allocNode;
-    //}
+        var allocNode: *Node = try self.alloc.create(Node);
+        allocNode.* = node;
+        return allocNode;
+    }
 
     pub fn appendChild(self: *Node, state: *NodeState) void {
         var node = Node{
@@ -68,42 +66,43 @@ pub const Node = struct {
             .parent = self,
             .children = std.ArrayList(*Node).init(self.alloc),
             .state = state,
-            .visitedHashes = self.visitedHashes,
         };
         var allocNode: *Node = self.alloc.create(Node) catch unreachable;
         allocNode.* = node;
         self.children.append(allocNode) catch unreachable;
     }
 
-    pub fn evalBackProp(self: *Node) !void {
+    pub fn backPropagate(self: *Node, from: *Node) !void {
         // backpropagate to update parent nodes
-        var score = try self.evaluationFunction();
-        self.visits += 1;
+        var score = try from.evaluationFunction();
+        //self.visits += 1;
         self.totalEvaluation += score;
-        var currentNode: *Node = self;
-        while (currentNode.*.parent) |node| {
+        self.avgScore = self.totalEvaluation / @intToFloat(f32, self.visits);
+        var currentNode: ?*Node = self.parent;
+        while (currentNode) |node| {
             node.*.visits += 1;
             node.*.totalEvaluation += score;
+            node.*.avgScore = node.totalEvaluation / @intToFloat(f32, node.visits);
 
-            currentNode = currentNode.parent orelse unreachable;
+            currentNode = node.parent orelse null;
         }
     }
 
     pub fn expand(self: *Node) !void {
-        for (self.state.nextActions.items) |action| {
+        actionLoop: for (self.state.nextActions.items) |action| {
             var clonedState = try self.state.clone();
-            defer clonedState.deinit();
             clonedState.action = action;
+            action.func(clonedState, action.params);
 
             // make sure we don't revisit
             var childHash = clonedState.hash();
-            for (self.visitedHashes.items) |hash| {
+            for (visitedHashes.items) |hash| {
                 if (hash == childHash)
-                    return;
+                    continue :actionLoop;
             }
 
-            log.warn("expand: {s}", .{clonedState.floors.items});
             self.appendChild(clonedState);
+            visitedHashes.append(childHash) catch unreachable;
         }
     }
 
@@ -125,45 +124,50 @@ pub const Node = struct {
     }
 
     pub fn removeFromParent(self: *Node) void {
-        var parent = self.parent.?;
-        for (parent.children.items) |parentChild, i| {
-            if (parentChild == self) {
-                _ = parent.children.swapRemove(i);
-                if (parent.children.items.len > 0) {
-                    parent.children.resize(parent.children.items.len - 1) catch unreachable;
-                } else {
-                    parent.children.clearAndFree();
+        if (self.parent) |parent| {
+            for (parent.children.items) |parentChild, i| {
+                if (parentChild == self) {
+                    if (parent.children.items.len > 1) {
+                        _ = parent.children.swapRemove(i);
+                        parent.children.resize(parent.children.items.len - 1) catch unreachable;
+                    } else {
+                        parent.children.clearAndFree();
+                    }
+                    return;
                 }
             }
         }
-        //self.deinit();
     }
 
     fn evaluationFunction(self: *Node) !f32 {
         // do post processing and store what we have of a puzzle
         var processedState = self.state.postProcess();
+        //log.warn("pre: {}", .{self.state.floors.items.len});
+        //log.warn("post: {}", .{processedState.floors.items.len});
 
         var congestionVal = computeCongestion(&processedState, 4, 4, 0.5);
 
         // calculate evaluation using computeMapEval
         var slice3x3Val = compute3x3Blocks(self.alloc, &processedState);
-        var score = computeMapEval(10, 5, 0.5, slice3x3Val, congestionVal, processedState.boxes.items.len);
+        var score = computeMapEval(10, 5, 1, slice3x3Val, congestionVal, processedState.boxes.items.len);
+        log.warn("score: {}", .{score});
 
         return score;
-    }
-
-    pub fn exploitation(self: *Node) f32 {
-        return (self.evaluationFunction() catch unreachable) * ((self.parent orelse self).totalEvaluation / @intToFloat(f32, self.visits));
     }
 
     pub fn exploration(self: *Node) f32 {
         const C: f32 = std.math.sqrt(2);
 
-        return C * std.math.sqrt(std.math.ln(@intToFloat(f32, (self.parent orelse self).visits)) / @intToFloat(f32, self.visits));
+        if (self.parent) |parent| {
+            return C * std.math.sqrt(std.math.ln(@intToFloat(f32, parent.visits)) / @intToFloat(f32, self.visits));
+        } else {
+            return 0;
+        }
     }
 
     pub fn ucb(self: *Node) f32 {
-        if (self.visits == 0) return std.math.f32_max;
-        return self.exploitation() + self.exploration();
+        //if (self.visits == 0) return std.math.f32_max;
+        if (self.parent == null) return self.avgScore;
+        return self.avgScore + self.exploration();
     }
 };

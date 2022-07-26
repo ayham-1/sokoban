@@ -214,7 +214,7 @@ pub fn build(b: *std.build.Builder) !void {
                 vis_cmd.addArgs(args);
             }
 
-            const vis_step = b.step("visualizer", "Visualize sokoban generation");
+            const vis_step = b.step("visualizer", "Run Visualize sokoban generation");
             vis_step.dependOn(&vis_cmd.step);
         },
     }

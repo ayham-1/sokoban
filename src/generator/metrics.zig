@@ -70,6 +70,7 @@ pub fn computeCongestion(
         wGoalCount * @intToFloat(f32, state.goals.items.len);
     var denominator: f32 = wObstacleCount * @intToFloat(f32, areaMod);
 
+    if (denominator == 0.0) return 0.0;
     return numerator / denominator;
 }
 
@@ -85,6 +86,10 @@ pub fn compute3x3Blocks(
     state: *NodeState,
 ) i32 {
     var areaMap: i32 = state.width * state.height;
+
+    if (state.floors.items.len <= 9 and state.obstacles.items.len <= 9)
+        return 0;
+
     var possibleHeightSlices: usize = std.math.divCeil(usize, state.height, 3) catch unreachable;
     var possibleWidthSlices: usize = std.math.divCeil(usize, state.width, 3) catch unreachable;
     var nSimilar3x3: i32 = 0;

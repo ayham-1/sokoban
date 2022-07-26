@@ -14,7 +14,7 @@
         {
             "label": "build-vis",
             "type": "shell",
-            "command": "zig build visualizer",
+            "command": "zig build",
             "problemMatcher": [],
             "group": {
                 "kind": "build",

@@ -27,8 +27,8 @@ var fontSize: f32 = 24;
 pub fn main() !void {
     var parentState = NodeState.init(alloc, levelSize, levelSize);
     parentNode = Node.init(alloc, parentState);
-    parentNode.state.simulate();
-    parentNode.expand() catch unreachable;
+    //parentNode.state.simulate();
+    //parentNode.expand() catch unreachable;
     if (std.os.argv.len > 1) {
         var iterateTimes: i64 = try std.fmt.parseInt(i64, try std.fmt.allocPrint(alloc, "{s}", .{std.os.argv[1]}), 10);
         _ = mcts(parentNode, iterateTimes);
@@ -397,7 +397,7 @@ pub fn drawCard(nodeVis: *NodeVis, nodeNum: usize) void {
     defer map.deinit();
     var builtMap = node.state.buildMap();
     builtMap.buildDisplayed() catch unreachable;
-    log.warn("node: {d}\n{s}", .{ nodeNum, builtMap.displayed.items });
+    //log.warn("node: {d}\n{s}", .{ nodeNum, builtMap.displayed.items });
     map.appendSlice(builtMap.displayed.items) catch unreachable;
     map.append(0) catch unreachable;
     var mapText = @ptrCast([*:0]const u8, map.items);
@@ -452,27 +452,27 @@ pub fn drawCard(nodeVis: *NodeVis, nodeNum: usize) void {
     );
     currentYProgress += 6 + @floatToInt(i32, fontSize);
 
-    //// draw self.action
-    //var action = std.ArrayList(u8).init(std.heap.c_allocator);
-    //defer action.deinit();
-    //action.appendSlice("self.action = ") catch unreachable;
-    //switch (node.state.action) {
-    //    NodeState.moveBox => action.appendSlice("moveBox") catch unreachable,
-    //    NodeState.evaluate => action.appendSlice("evaluate") catch unreachable,
-    //    NodeState.placeBox => action.appendSlice("placeBox") catch unreachable,
-    //    NodeState.placeFloor => action.appendSlice("placeFloor") catch unreachable,
-    //    NodeState.placePlayer => action.appendSlice("placePlayer") catch unreachable,
-    //    else => action.appendSlice("nill") catch unreachable,
-    //}
-    //action.append(0) catch unreachable;
-    //var actionText = @ptrCast([*:0]const u8, action.items);
-    //var actionX = cardXCenter - @floatToInt(i32, @divFloor(raylib.MeasureTextEx(font, actionText, fontSize, 2).x, 2));
-    //raylib.DrawTextEx(
-    //    font,
-    //    actionText,
-    //    raylib.Vector2{ .x = @intToFloat(f32, actionX), .y = @intToFloat(f32, currentYProgress + 6) },
-    //    fontSize,
-    //    2,
-    //    raylib.WHITE,
-    //);
+    // draw self.action
+    var action = std.ArrayList(u8).init(std.heap.c_allocator);
+    defer action.deinit();
+    action.appendSlice("self.action = ") catch unreachable;
+    switch (node.state.action.func) {
+        NodeState.moveBox => action.appendSlice("moveBox") catch unreachable,
+        //NodeState.evaluate => action.appendSlice("evaluate") catch unreachable,
+        //NodeState.placeBox => action.appendSlice("placeBox") catch unreachable,
+        NodeState.placeFloor => action.appendSlice("placeFloor") catch unreachable,
+        NodeState.placePlayer => action.appendSlice("placePlayer") catch unreachable,
+        else => action.appendSlice("nill") catch unreachable,
+    }
+    action.append(0) catch unreachable;
+    var actionText = @ptrCast([*:0]const u8, action.items);
+    var actionX = cardXCenter - @floatToInt(i32, @divFloor(raylib.MeasureTextEx(font, actionText, fontSize, 2).x, 2));
+    raylib.DrawTextEx(
+        font,
+        actionText,
+        raylib.Vector2{ .x = @intToFloat(f32, actionX), .y = @intToFloat(f32, currentYProgress + 6) },
+        fontSize,
+        2,
+        raylib.WHITE,
+    );
 }

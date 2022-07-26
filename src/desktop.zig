@@ -30,10 +30,10 @@ pub fn main() anyerror!void {
     //var map = Map.init(alloc);
     //try map.build(gameMap);
 
-    //var map = generator.get(alloc, 8, 8, 500);
-    //defer map.deinit();
-    //
-    generator.get(alloc, 8, 8, 100);
+    var map = generator.get(alloc, 8, 8, 1000).state.buildMap();
+    defer map.deinit();
+    map.buildDisplayed() catch unreachable;
+    std.log.warn("map: \n{s}", .{map.displayed.items});
 
     //try game.start(map.*);
     //defer game.stop();

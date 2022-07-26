@@ -29,17 +29,16 @@ const NodeState = @import("nodestate.zig").NodeState;
 
 const Allocator = std.mem.Allocator;
 
-pub fn get(alloc: Allocator, width: u8, height: u8, iter: i64) void {
+pub fn get(alloc: Allocator, width: u8, height: u8, iter: i64) *Node {
     var parentState = NodeState.init(alloc, width, height);
     var parentNode = Node.init(alloc, parentState);
-    parentNode.state.simulate();
     var map = parentNode.state.buildMap();
     map.buildDisplayed() catch unreachable;
     log.warn("{s}", .{map.displayed.items});
 
     var bestNode: *Node = mcts(parentNode, iter);
 
-    log.info("score: {d:.3}", .{bestNode.totalEvaluation / @intToFloat(f32, bestNode.visits)});
+    //log.info("score: {d:.3}", .{bestNode.totalEvaluation / @intToFloat(f32, bestNode.visits)});
 
-    //return bestState;
+    return bestNode;
 }

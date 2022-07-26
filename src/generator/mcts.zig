@@ -9,46 +9,47 @@ const Allocator = std.mem.Allocator;
 pub fn mcts(node: *Node, epoch: i64) *Node {
     var bestNode = node;
     var bestScore: f32 = std.math.f32_min;
+    var simulated: *Node = node;
 
+    //var rand = std.rand.DefaultPrng.init(@intCast(u64, std.time.milliTimestamp()));
     var epochsLeft: i64 = epoch;
     var startTime: i64 = std.time.timestamp();
     var totalExploitOverExplore: f64 = 0;
+
     while (epochsLeft > 0) {
         defer epochsLeft -= 1;
 
         var timestamp = std.time.nanoTimestamp();
 
         var selected = node.select();
-        if (selected.parent) |_| {
-            selected.state.simulate();
-            if (selected.visits == 0) {
-                selected.state.simulate();
-                selected.evalBackProp() catch unreachable;
-            } else {
-                selected.expand() catch unreachable;
-                selected.evalBackProp() catch unreachable;
-            }
+        selected.expand() catch unreachable;
+
+        if (selected.children.items.len == 0) {
+            selected.backPropagate(selected) catch unreachable;
+            selected.removeFromParent();
+            simulated = selected;
         } else {
-            selected.expand() catch unreachable;
-            selected.state.simulate();
-            selected.evalBackProp() catch unreachable;
+            for (selected.children.items) |child| {
+                simulated = child.clone() catch unreachable;
+                simulated.state.simulate();
+                child.backPropagate(simulated) catch unreachable;
+            }
         }
 
-        if (selected.totalEvaluation > bestScore) {
-            bestScore = selected.totalEvaluation;
-            bestNode = selected;
+        if (simulated.totalEvaluation > bestScore) {
+            bestScore = simulated.totalEvaluation;
+            bestNode = simulated;
         }
 
         var timeTaken = std.time.nanoTimestamp() - timestamp;
 
-        var exploitationOverExploration = node.exploitation() / node.exploration();
+        var exploitationOverExploration = node.avgScore / node.exploration();
         totalExploitOverExplore += exploitationOverExploration;
 
-        log.info("iter#{}: time: {}ns, explore/exploit: {d:.3}, evaluated: {}", .{
+        log.info("iter#{}: time: {}ns, explore/exploit: {d:.3}", .{
             epoch - epochsLeft,
             timeTaken,
             exploitationOverExploration,
-            selected.state.evaluated,
         });
     }
     log.info("avg. time: {}s, avg. explore/exploit: {}, best score: {d:.3}", .{
