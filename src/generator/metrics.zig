@@ -1,12 +1,8 @@
 const std = @import("std");
 const log = @import("../log.zig");
 const soko = @import("../constants.zig");
-const Map = @import("../map.zig").Map;
-const Puzzle = @import("../puzzle.zig").Puzzle;
-const Node = @import("node.zig").node;
-
+const NodeState = @import("nodestate.zig").NodeState;
 const Allocator = std.mem.Allocator;
-
 /// Computes map evaluation
 ///
 /// weightSlice3x3 - weight value
@@ -24,151 +20,122 @@ pub fn computeMapEval(
     weightBoxCount: f32,
     slice3x3Val: i32,
     congestionVal: f32,
-    boxCount: i32,
-) !f32 {
+    boxCount: usize,
+) f32 {
     const k = 200;
     return (weightSlice3x3 * @intToFloat(f32, slice3x3Val) +
         weightCongestion * congestionVal +
         weightBoxCount * @intToFloat(f32, boxCount)) / k;
 }
-
 /// The higher the return value the higher the congested factor of the sokoban
 /// puzzle given. Meaning, puzzles with overlapping box path solutions are
 /// valued more. This also factors the amount of obstacles present.
 ///
-/// map - Sokoban puzzle map to evalBackProp its congestion value.
+/// state - Sokoban puzzle generate node state
 /// boxPairs - list of bounding rectangles of every box and its final position/goal
 ///
 /// returns the congestion feature analysis factor
 pub fn computeCongestion(
-    alloc: Allocator,
-    map: *Map,
-    boxGoalPairs: std.ArrayList(soko.BoxGoalPair),
+    state: *NodeState,
     wBoxCount: f32,
     wGoalCount: f32,
     wObstacleCount: f32,
-) !f32 {
-    var congestion: f32 = 0.0;
-    for (boxGoalPairs.items) |pair| {
-        // retreive the bounding rectangle
-        const xMax = @maximum(pair.box.x, pair.goal.x);
-        const xMin = @minimum(pair.box.x, pair.goal.x);
-        const yMax = @maximum(pair.box.y, pair.goal.y);
-        const yMin = @minimum(pair.box.y, pair.goal.y);
-
-        var boundingBox: soko.MapArray = soko.MapArray.init(alloc);
-        defer {
-            for (boundingBox.items) |item| {
-                item.deinit();
-            }
-            boundingBox.deinit();
-        }
-
-        for (map.rows.items[yMin .. yMax + 1]) |row| {
-            var newRow = soko.MapRowArray.init(alloc);
-            for (row.items[xMin .. xMax + 1]) |item| {
-                try newRow.append(item);
-            }
-            try boundingBox.append(newRow);
-        }
-
-        // count & calculate the congestion variables
-        var boxArea: f32 = @intToFloat(f32, std.math.absCast((xMax + 1) - xMin + 1) * std.math.absCast((yMax + 1) - yMin));
-        var nInitialBoxes: f32 = 0;
-        var nGoal: f32 = 0;
-        var nObstacles: f32 = 0;
-        for (boundingBox.items) |row| {
-            for (row.items) |item| {
-                switch (item.tex) {
-                    .box => nInitialBoxes += 1,
-                    .boxDocked => nGoal += 1,
-                    .dock => nGoal += 1,
-                    .wall => nObstacles += 1,
-                    .none => nObstacles += 1,
-                    else => {},
+) f32 {
+    var areaMod: usize = 0;
+    for (state.boxes.items) |boxPos, boxId| {
+        var goalPos = if (state.goals.items.len == 0) boxPos else state.goals.items[boxId];
+        var minX = @minimum(goalPos.x, boxPos.x);
+        var maxX = @maximum(goalPos.x, boxPos.x);
+        var minY = @minimum(goalPos.y, boxPos.y);
+        var maxY = @maximum(goalPos.y, boxPos.y);
+        var width = maxX - minX + 2;
+        var height = maxY - minY + 2;
+        var area: usize = width * height;
+        var nObstacles: usize = 0;
+        for (state.obstacles.items) |obstacle| {
+            if (obstacle.x >= minX and obstacle.x <= maxX) {
+                if (obstacle.y >= minY and obstacle.y <= maxY) {
+                    nObstacles += 1;
                 }
             }
         }
-
-        // calculate factor and sum
-        congestion += (wBoxCount * nInitialBoxes + wGoalCount * nGoal) / (wObstacleCount * (boxArea - nObstacles));
+        areaMod += area - nObstacles;
     }
-    return congestion;
+    var numerator: f32 = wBoxCount * @intToFloat(f32, state.boxes.items.len) +
+        wGoalCount * @intToFloat(f32, state.goals.items.len);
+    var denominator: f32 = wObstacleCount * @intToFloat(f32, areaMod);
+    if (denominator == 0.0) return 0.0;
+    return numerator / denominator;
 }
-
-/// The higher the return value the more "complex" it looks. This is used to
-/// punish puzzles that have spatious floors or obstacles, effectively filtering
-/// out puzzles that look easy due to its spatious nature.
+/// The higher the return value the more "complex" the state looks. This is
+/// used to punish puzzles that have spatious floors or obstacles, effectively
+/// filtering out puzzles that look easy due to its spatious nature.
 ///
-/// map - Sokoban puzzle to evaluate its congestion value.
+/// state - Sokoban puzzle generate node state
 ///
 /// returns the number of blocks in a map that are not 3x3 blobs.
 pub fn compute3x3Blocks(
-    map: *Map,
-) !i32 {
-    // considerably increase speed of allocation and deallocation
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-
-    // calculate area
-    var areaMap: i32 = @intCast(i32, map.rows.items.len * map.rows.items[0].items.len);
-
-    // generate map search state
-    var mapCheckState = try std.ArrayList(std.ArrayList(bool)).initCapacity(arena.allocator(), map.rows.items.len);
-    for (map.rows.items) |row| {
-        var newRow = try std.ArrayList(bool).initCapacity(arena.allocator(), row.items.len);
-        for (row.items) |_| {
-            try newRow.append(false);
-        }
-        try mapCheckState.append(newRow);
-    }
-
-    // initialize slice3x3
-    var slice3x3: soko.MapArray = try soko.MapArray.initCapacity(arena.allocator(), 3);
-    inline for ([_]usize{ 0, 1, 2 }) |_| {
-        var newRow = try soko.MapRowArray.initCapacity(arena.allocator(), 3);
-        inline for ([_]usize{ 0, 1, 2 }) |_| {
-            try newRow.append(soko.Textile{ .tex = .wall, .id = 0 });
-        }
-        try slice3x3.append(newRow);
-    }
-
-    // count number of 3x3 area which are all similar
-
+    alloc: Allocator,
+    state: *NodeState,
+) i32 {
+    var areaMap: i32 = state.width * state.height;
+    if (state.floors.items.len <= 9 and state.obstacles.items.len <= 9)
+        return 0;
+    var possibleHeightSlices: usize = std.math.divCeil(usize, state.height, 3) catch unreachable;
+    var possibleWidthSlices: usize = std.math.divCeil(usize, state.width, 3) catch unreachable;
     var nSimilar3x3: i32 = 0;
-    for (map.rows.items) |row, i| {
-        var j: usize = 0;
-        while (j + 3 < row.items.len) {
-            defer j += 1;
-            if (mapCheckState.items[i].items[j] == true) continue;
-
-            var iOffset: usize = @minimum(map.rows.items.len, i + 3);
-            var jOffset: usize = @minimum(map.rows.items[0].items.len, j + 3);
-            for (map.rows.items[i..iOffset]) |sliceRow, y| {
-                for (sliceRow.items[j..jOffset]) |sliceItem, x|
-                    slice3x3.items[y].items[x] = sliceItem;
+    var nSlicesFloors = std.ArrayList(std.ArrayList(u32)).initCapacity(
+        alloc,
+        possibleHeightSlices,
+    ) catch unreachable;
+    var nSlicesObstacles = std.ArrayList(std.ArrayList(u32)).initCapacity(
+        alloc,
+        possibleHeightSlices,
+    ) catch unreachable;
+    // initialize nSlices counting
+    var i: usize = 0;
+    while (i < possibleHeightSlices) {
+        defer i += 1;
+        var newRow = std.ArrayList(u32).initCapacity(alloc, possibleWidthSlices) catch unreachable;
+        newRow.appendNTimes(0, possibleWidthSlices) catch unreachable;
+        nSlicesFloors.append(newRow) catch unreachable;
+    }
+    i = 0;
+    while (i < possibleHeightSlices) {
+        defer i += 1;
+        var newRow = std.ArrayList(u32).initCapacity(alloc, possibleWidthSlices) catch unreachable;
+        newRow.appendNTimes(0, possibleWidthSlices) catch unreachable;
+        nSlicesObstacles.append(newRow) catch unreachable;
+    }
+    // count number of floors and obstacles and add them to the appropriate
+    // counter
+    //
+    // update nSimilar3x3 before doing obstacles
+    //
+    if (state.floors.items.len > 9) {
+        for (state.floors.items) |pos| {
+            var slicePosX = @divFloor(pos.x, 3);
+            var slicePosY = @divFloor(pos.y, 3);
+            nSlicesFloors.items[slicePosY].items[slicePosX] += 1;
+        }
+    }
+    for (nSlicesFloors.items) |row| {
+        for (row.items) |item| {
+            if (item >= 9) {
+                nSimilar3x3 += 1;
             }
-
-            var prevItem: soko.TexType = slice3x3.items[0].items[0].tex;
-            var similar: bool = true;
-            sliceCheck: for (slice3x3.items) |sliceRow| {
-                for (sliceRow.items) |sliceItem| {
-                    if (sliceItem.tex != .worker and sliceItem.tex != .workerDocked and sliceItem.tex != prevItem) {
-                        similar = false;
-                        break :sliceCheck;
-                    }
-                }
-            }
-
-            if (similar) {
-                // update all mapCheckState relevant data
-                for (map.rows.items[i..iOffset]) |_, sliceI| {
-                    for (map.rows.items[sliceI].items[j..jOffset]) |_, sliceJ| {
-                        mapCheckState.items[i + sliceI].items[j + sliceJ] = true;
-                    }
-                }
-
-                j += 2;
+        }
+    }
+    if (state.obstacles.items.len > 9) {
+        for (state.obstacles.items) |pos| {
+            var slicePosX = @divFloor(pos.x, 3);
+            var slicePosY = @divFloor(pos.y, 3);
+            nSlicesObstacles.items[slicePosY].items[slicePosX] += 1;
+        }
+    }
+    for (nSlicesObstacles.items) |row| {
+        for (row.items) |item| {
+            if (item >= 9) {
                 nSimilar3x3 += 1;
             }
         }
