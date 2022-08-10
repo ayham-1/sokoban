@@ -195,27 +195,6 @@ pub fn build(b: *std.build.Builder) !void {
 
             const run_step = b.step("run", "Run the app");
             run_step.dependOn(&run_cmd.step);
-
-            const exeVisualizer = b.addExecutable(APP_NAME ++ "-vis", "src/visualizer.zig");
-            exeVisualizer.setTarget(target);
-            exeVisualizer.setBuildMode(mode);
-            exeVisualizer.pie = true;
-            exeVisualizer.linkLibrary(raylib);
-            exeVisualizer.addIncludeDir(raylibSrc);
-            exeVisualizer.addIncludeDir(raylibSrc ++ "extras/");
-            exeVisualizer.addIncludeDir(bindingSrc);
-            exeVisualizer.addCSourceFile(bindingSrc ++ "marshal.c", &.{});
-            exeVisualizer.linkLibC();
-            exeVisualizer.install();
-
-            const vis_cmd = exeVisualizer.run();
-            vis_cmd.step.dependOn(b.getInstallStep());
-            if (b.args) |args| {
-                vis_cmd.addArgs(args);
-            }
-
-            const vis_step = b.step("visualizer", "Visualize sokoban generation");
-            vis_step.dependOn(&vis_cmd.step);
         },
     }
 }

@@ -11,7 +11,7 @@ pub const TexId = u8;
 pub const MapError = error{MapError};
 pub const InvalidPos = error{InvalidPos};
 
-pub const Textile = struct { tex: TexType, id: u8 };
+pub const Textile = struct { tex: TexType, id: TexId };
 pub const TexType = enum(u8) {
     floor = '.',
     wall = 'w',

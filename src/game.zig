@@ -157,11 +157,11 @@ fn drawTextCenter(str: [*:0]const u8, color: raylib.Color) void {
 }
 
 pub fn updateMap(givenMap: []u8) !void {
-    try puzzle.map.buildMap(givenMap);
+    try puzzle.map.build(givenMap);
 
     // make sure window is sized properly
-    screenWidth = (puzzle.sizeWidth * soko.texWidth) + 2 * soko.mapBorder;
-    screenHeight = (puzzle.sizeHeight * soko.texHeight) + 2 * soko.mapBorder;
+    screenWidth = (puzzle.map.sizeWidth * soko.texWidth) + 2 * soko.mapBorder;
+    screenHeight = (puzzle.map.sizeHeight * soko.texHeight) + 2 * soko.mapBorder;
 
     if (raylib.IsWindowReady()) raylib.SetWindowSize(screenWidth, screenHeight);
 }

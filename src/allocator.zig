@@ -5,7 +5,7 @@ const log = @import("log.zig");
 const assert = std.debug.assert;
 
 const Allocator = std.mem.Allocator;
-var gpa = if (builtin.os.tag != .emscripten and builtin.os.tag != .wasi and builtin.mode != .ReleaseFast and builtin.mode != .ReleaseSmall) std.heap.GeneralPurposeAllocator(.{ .stack_trace_frames = 10 }){};
+var gpa = if (builtin.os.tag != .emscripten and builtin.os.tag != .wasi and builtin.mode != .ReleaseFast and builtin.mode != .ReleaseSmall) std.heap.GeneralPurposeAllocator(.{ .stack_trace_frames = 100 }){};
 
 pub const ZecsiAllocator =
     struct {

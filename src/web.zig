@@ -9,6 +9,7 @@ const log = @import("log.zig");
 const game = @import("game.zig");
 const ZecsiAllocator = @import("allocator.zig").ZecsiAllocator;
 const ray = @import("raylib/raylib.zig");
+const Map = @import("map.zig").Map;
 
 var zalloc = ZecsiAllocator{};
 var alloc = zalloc.allocator();
@@ -37,7 +38,9 @@ fn safeMain() !c_int {
 
     var gameMap = try alloc.alloc(u8, testMap.len);
     std.mem.copy(u8, gameMap, testMap);
-    try game.start(gameMap);
+    var map = Map.init(alloc);
+    try map.build(gameMap);
+    try game.start(map);
     defer game.stop();
     defer alloc.free(gameMap);
 
@@ -53,13 +56,13 @@ export fn gameLoop() callconv(.C) void {
 
     game.loop(ray.GetFrameTime());
 
-    if (game.workerMoved) {
+    if (game.puzzle.workerMoved) {
         updateMapView();
     }
 }
 
 fn updateMapView() void {
-    game.buildDisplayedMap() catch {
+    game.puzzle.map.buildDisplayed() catch {
         emsdk.emscripten_run_script(invalidMapScript);
         //emsdk.emscripten_cancel_main_loop();
         return;
@@ -67,11 +70,14 @@ fn updateMapView() void {
 
     var gameMapScript = std.ArrayList(u8).init(alloc);
     gameMapScript.appendSlice(mapViewScript) catch unreachable;
-    gameMapScript.appendSlice(game.mapDisplayed.items) catch unreachable;
-    gameMapScript.append('\'') catch unreachable;
-    gameMapScript.appendSlice(".replace(/<br>/gi, \"\\r\\n\");") catch unreachable;
+    gameMapScript.appendSlice(game.puzzle.map.displayed.items) catch unreachable;
+    gameMapScript.appendSlice("`") catch unreachable;
+    gameMapScript.append(';') catch unreachable;
     gameMapScript.append('\x00') catch unreachable;
+
     emsdk.emscripten_run_script(gameMapScript.items.ptr);
+
+    //emsc_set_window_size(game.puzzle.map.sizeWidth * game.);
 }
 
 export fn updateMap() void {
@@ -97,7 +103,10 @@ const invalidMapScript =
 ;
 
 const mapViewScript =
-    \\document.getElementById("mapView").value = '
+    \\document.getElementById("mapView").value = `
+;
+const mapViewCleanScript =
+    \\document.getElementById("mapView").innerHTML;
 ;
 
 const getMapView =

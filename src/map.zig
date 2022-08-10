@@ -45,12 +45,12 @@ pub const Map = struct {
             }
             const builtin = @import("builtin");
             if (builtin.os.tag == .wasi) {
-                try self.displayed.appendSlice("<br>");
+                try self.displayed.appendSlice("\r\n");
             } else {
                 try self.displayed.append('\n');
             }
         }
-        try self.displayed.append(0);
+        //try self.displayed.append(0);
     }
 
     pub fn build(self: *Map, givenMap: []u8) !void {
