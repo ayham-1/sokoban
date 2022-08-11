@@ -3,12 +3,12 @@
 
 #include <stddef.h>
 
-const int texWidth = 32;
-const int texHeight = 32;
+extern const int texWidth;
+extern const int texHeight;
 
 typedef unsigned short ID;
 
-typedef enum TexTypes {
+typedef enum TexType {
 	floor = '.',
 	wall = 'w',
 	dock = 'd',
@@ -17,38 +17,38 @@ typedef enum TexTypes {
 	worker = 'p',
 	workerDocked = 'X',
 	none = '#',
-	next = '\n',
+	next = '\n'
 } TexType;
 
-typedef struct Textiles {
+typedef struct Textile {
 	ID id;
 	TexType tex;
 } Textile;
 
-typedef struct MapRows {
-	Textile* row;
+typedef struct MapRow {
+	Textile* cols;
 	size_t s;
 } MapRow;
 
-typedef struct Positions {
+typedef struct MapArray {
+	MapRow* rows;
+	size_t s;
+} MapArray;
+
+typedef struct Pos {
 	unsigned short x; 
 	unsigned short y; 
 } Pos;
 
-typedef struct BoxGoalPair {
+typedef struct BGPair {
 	Pos box;
 	Pos goal;
 } BGPair;
 
-typedef enum Directions {
+typedef enum Direction {
 	up = 0, down = 1, left = 2, right = 3
 } Direction;
 
-const short DirectionOff[4][2] = {
-	{0, -1},
-	{0, 1},
-	{-1, 0},
-	{1, 0},
-};
+extern const short DirectionOff[4][2];
 
 #endif
