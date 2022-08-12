@@ -4,8 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-extern const int8_t texWidth;
-extern const int8_t texHeight;
+extern const uint8_t texWidth;
+extern const uint8_t texHeight;
 
 typedef struct Pos {
 	size_t x; 
@@ -59,5 +59,8 @@ typedef enum Direction {
 } Direction;
 
 extern const int8_t DirectionOff[4][2];
+
+/* sdbm algorithm URL: http://www.cse.yorku.ca/~oz/hash.html */
+uint64_t sdbm_hash(unsigned char* dat);
 
 #endif

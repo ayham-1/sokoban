@@ -23,6 +23,18 @@ void map_deinit(Map* map) {
 	map = NULL;
 }
 
+uint64_t map_hash(Map* map) {
+	uint64_t hash = 0;
+
+	for (int i = 0; i < map->arr.s; i++)
+		hash += sdbm_hash((unsigned char*)map->arr.rows[i].cols);
+
+	hash += sdbm_hash((unsigned char*)map->boxPos);
+	hash += sdbm_hash((unsigned char*)map->s_boxPos);
+
+	return hash;
+}
+
 Map* map_clone(Map* map) {
 	Map* result = (Map*)malloc(sizeof(Map));
 	memcpy(result, map, sizeof(Map));

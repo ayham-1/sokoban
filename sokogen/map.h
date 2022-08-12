@@ -20,6 +20,7 @@ typedef struct Map {
 Map* map_init();
 void map_deinit(Map* map);
 Map* map_clone(Map* map);
+uint64_t map_hash(Map* map);
 int8_t map_build(Map* map, char* displayed);
 int8_t map_build_displayed(Map* map);
 void map_set_box_positions(Map* map);
