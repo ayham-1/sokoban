@@ -2,11 +2,17 @@
 #define CONSTS_H
 
 #include <stddef.h>
+#include <stdint.h>
 
-extern const int texWidth;
-extern const int texHeight;
+extern const int8_t texWidth;
+extern const int8_t texHeight;
 
-typedef unsigned short ID;
+typedef struct Pos {
+	size_t x; 
+	size_t y; 
+} Pos;
+
+typedef size_t ID;
 
 typedef enum TexType {
 	floor = '.',
@@ -25,6 +31,12 @@ typedef struct Textile {
 	TexType tex;
 } Textile;
 
+typedef struct TextilePos {
+	ID id;
+	TexType tex;
+	Pos pos;
+} TextilePos;
+
 typedef struct MapRow {
 	Textile* cols;
 	size_t s;
@@ -35,10 +47,7 @@ typedef struct MapArray {
 	size_t s;
 } MapArray;
 
-typedef struct Pos {
-	unsigned short x; 
-	unsigned short y; 
-} Pos;
+
 
 typedef struct BGPair {
 	Pos box;
@@ -49,6 +58,6 @@ typedef enum Direction {
 	up = 0, down = 1, left = 2, right = 3
 } Direction;
 
-extern const short DirectionOff[4][2];
+extern const int8_t DirectionOff[4][2];
 
 #endif

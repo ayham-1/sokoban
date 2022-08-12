@@ -1,6 +1,8 @@
 #ifndef MAP_H
 #define MAP_H
 
+#include <stdint.h>
+
 #include "consts.h"
 
 typedef struct Map {
@@ -10,17 +12,17 @@ typedef struct Map {
 	size_t width;
 	size_t height;
 	Pos workerPos;
-	BGPair* boxPos;
+	TextilePos* boxPos;
+	size_t s_boxPos; /* the number of items */
 	
 } Map;
 
 Map* map_init();
 void map_deinit(Map* map);
 Map* map_clone(Map* map);
-int map_build(Map* map, char* displayed);
-int map_build_displayed(Map* map);
+int8_t map_build(Map* map, char* displayed);
+int8_t map_build_displayed(Map* map);
 void map_set_box_positions(Map* map);
 void map_set_worker_position(Map* map);
-
 
 #endif
