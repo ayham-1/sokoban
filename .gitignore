@@ -134,6 +134,8 @@ tags
 # Built Visual Studio Code Extensions
 *.vsix
 
+sokogen/build/
+
 # zig
 zig-cache/
 zig-out/

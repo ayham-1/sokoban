@@ -151,3 +151,16 @@ void map_set_box_positions(Map* map) {
 		}
 	}
 }
+
+void map_set_worker_position(Map* map) {
+	for (size_t i = 0; i < map->arr.s; i++) {
+		for (size_t j = 0; j < map->arr.rows[i].s; j++) {
+			if (map->arr.rows[i].cols[j].tex == worker) {
+				Pos pos;
+				pos.x = j;
+				pos.y = i;
+				map->workerPos = pos;
+			}
+		}
+	}
+}
