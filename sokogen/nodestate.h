@@ -22,8 +22,13 @@ struct NodeState {
 	size_t s_nextActions;
 
 	Map* map;
+	Map* freezedMap;
+
 	Textile* playerReach;
 	size_t s_playerReach;
+
+	BGPair* boxGoal;
+	size_t s_boxGoal;
 };
 
 NodeState* snode_init(uint8_t width, uint8_t height);

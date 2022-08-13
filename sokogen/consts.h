@@ -4,15 +4,17 @@
 #include <stddef.h>
 #include <stdint.h>
 
+typedef size_t ID;
+typedef int8_t axis;
+
 extern const uint8_t texWidth;
 extern const uint8_t texHeight;
 
 typedef struct Pos {
-	size_t x; 
-	size_t y; 
+	axis x; 
+	axis y; 
 } Pos;
 
-typedef size_t ID;
 
 typedef enum TexType {
 	floor = '.',
@@ -32,8 +34,7 @@ typedef struct Textile {
 } Textile;
 
 typedef struct TextilePos {
-	ID id;
-	TexType tex;
+	Textile* tile;
 	Pos pos;
 } TextilePos;
 
@@ -58,9 +59,9 @@ typedef enum Direction {
 	up = 0, down = 1, left = 2, right = 3
 } Direction;
 
-extern const int8_t DirectionOff[4][2];
+extern const axis DirectionOff[4][2];
 
 /* sdbm algorithm URL: http://www.cse.yorku.ca/~oz/hash.html */
-uint64_t sdbm_hash(unsigned char* dat);
+uint64_t sdbm_hash(uint8_t* dat);
 
 #endif

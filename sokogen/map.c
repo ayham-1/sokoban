@@ -16,8 +16,8 @@ Map* map_init() {
 }
 
 void map_deinit(Map* map) {
-	if (map->arr.rows) free(map->arr.rows);
-	if (map->displayed) free(map->displayed);
+	free(map->arr.rows);
+	free(map->displayed);
 
 	free(map);
 	map = NULL;
@@ -27,15 +27,17 @@ uint64_t map_hash(Map* map) {
 	uint64_t hash = 0;
 
 	for (int i = 0; i < map->arr.s; i++)
-		hash += sdbm_hash((unsigned char*)map->arr.rows[i].cols);
+		hash += sdbm_hash((uint8_t*)map->arr.rows[i].cols);
 
-	hash += sdbm_hash((unsigned char*)map->boxPos);
-	hash += sdbm_hash((unsigned char*)map->s_boxPos);
+	hash += sdbm_hash((uint8_t*)map->boxPos);
+	hash += sdbm_hash((uint8_t*)map->s_boxPos);
 
 	return hash;
 }
 
 Map* map_clone(Map* map) {
+	if (map == NULL) return NULL;
+
 	Map* result = (Map*)malloc(sizeof(Map));
 	memcpy(result, map, sizeof(Map));
 
@@ -154,11 +156,10 @@ void map_set_box_positions(Map* map) {
 				pos.x = j;
 				pos.y = i;
 
-				TextilePos tex; 
-				tex.id = map->arr.rows[i].cols[j].id;
-				tex.tex = map->arr.rows[i].cols[j].tex;
-				tex.pos = pos;
-				map->boxPos[map->s_boxPos - 1] = tex;
+				TextilePos ptex; 
+				ptex.tile = &map->arr.rows[i].cols[j];
+				ptex.pos = pos;
+				map->boxPos[map->s_boxPos - 1] = ptex;
 			}
 		}
 	}

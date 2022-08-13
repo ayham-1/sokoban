@@ -34,8 +34,12 @@ NodeState* snode_init(uint8_t width, uint8_t height) {
 	result->nextActions = (Action**)malloc(sizeof(Action*));
 	result->nextActions[0] = floorAct;
 	result->s_nextActions = 1;
-	result->map = (Map*)malloc(sizeof(Map));
+	result->map = map_init();
+	result->freezedMap = NULL;
 	result->playerReach = NULL;
+	result->s_playerReach = 0;
+	result->boxGoal = NULL;
+	result->s_boxGoal = 0;
 
 	return result;
 }
@@ -48,8 +52,9 @@ void snode_deinit(NodeState* snode) {
 	free(snode->nextActions);
 
 	map_deinit(snode->map);
+	map_deinit(snode->freezedMap);
 	free(snode->playerReach);
-
+	free(snode->boxGoal);
 	free(snode);
 }
 
@@ -66,10 +71,15 @@ NodeState* snode_clone(NodeState* snode) {
 	}
 
 	result->map = map_clone(snode->map);
+	result->freezedMap = map_clone(snode->freezedMap);
 
 	result->s_playerReach = snode->s_playerReach;
 	result->playerReach = (Textile*)malloc(sizeof(Textile) * result->s_playerReach);
 	memcpy(result->playerReach, snode->playerReach, sizeof(Textile) * result->s_playerReach);
+
+	result->s_boxGoal = snode->s_boxGoal;
+	result->boxGoal = (BGPair*)malloc(sizeof(BGPair) * result->s_boxGoal);
+	memcpy(result->boxGoal, snode->boxGoal, sizeof(BGPair) * result->s_boxGoal);
 
 	return result;
 }
@@ -77,15 +87,42 @@ NodeState* snode_clone(NodeState* snode) {
 uint64_t snode_hash(NodeState* snode) {
 	uint64_t hash = 0;
 
-	hash += sdbm_hash((unsigned char*)snode->action);
+	hash += sdbm_hash((uint8_t*)snode->action);
 	for (int i = 0; i < snode->s_nextActions; i++)
-		hash += sdbm_hash((unsigned char*)snode->nextActions[i]);
-	hash += sdbm_hash((unsigned char*)snode->s_nextActions);
+		hash += sdbm_hash((uint8_t*)snode->nextActions[i]);
+	hash += sdbm_hash((uint8_t*)snode->s_nextActions);
 
-	hash += sdbm_hash((unsigned char*)snode->playerReach);
-	hash += sdbm_hash((unsigned char*)snode->s_playerReach);
+	hash += sdbm_hash((uint8_t*)snode->playerReach);
+	hash += sdbm_hash((uint8_t*)snode->s_playerReach);
+
+	hash += sdbm_hash((uint8_t*)snode->boxGoal);
+	hash += sdbm_hash((uint8_t*)snode->s_boxGoal);
 
 	hash += map_hash(snode->map);
 
 	return hash;
+}
+
+void snode_post_process(NodeState* snode) {
+	if (snode->freezedMap == NULL) return;
+
+	/* 
+	 * convert all boxes that are moves 1 or less times into obstacles
+	   convert all boxes that moved more than 1 time into goals (docks)
+	   */
+	for (int i = 0; i < snode->s_boxGoal; i++) {
+		BGPair paired = snode->boxGoal[i];
+
+		axis b_x = paired.box.x;
+		axis b_y = paired.box.y;
+
+		axis g_x = paired.goal.x;
+		axis g_y = paired.goal.y;
+
+		if (abs(b_x - g_x) <= 1 && abs(b_y - g_y) <= 1)
+			snode->freezedMap->arr.rows[b_y].cols[b_x].tex = wall;
+		else
+			snode->freezedMap->arr.rows[g_y].cols[g_x].tex = dock;
+	}
+
 }
