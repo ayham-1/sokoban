@@ -87,16 +87,16 @@ NodeState* snode_clone(NodeState* snode) {
 uint64_t snode_hash(NodeState* snode) {
 	uint64_t hash = 0;
 
-	hash += sdbm_hash((uint8_t*)snode->action);
+	hash += sdbm_hash((uintptr_t*)snode->action);
 	for (int i = 0; i < snode->s_nextActions; i++)
-		hash += sdbm_hash((uint8_t*)snode->nextActions[i]);
-	hash += sdbm_hash((uint8_t*)snode->s_nextActions);
+		hash += sdbm_hash((uintptr_t*)snode->nextActions[i]);
+	hash += sdbm_hash((uintptr_t*)snode->s_nextActions);
 
-	hash += sdbm_hash((uint8_t*)snode->playerReach);
-	hash += sdbm_hash((uint8_t*)snode->s_playerReach);
+	hash += sdbm_hash((uintptr_t*)snode->playerReach);
+	hash += sdbm_hash((uintptr_t*)snode->s_playerReach);
 
-	hash += sdbm_hash((uint8_t*)snode->boxGoal);
-	hash += sdbm_hash((uint8_t*)snode->s_boxGoal);
+	hash += sdbm_hash((uintptr_t*)snode->boxGoal);
+	hash += sdbm_hash((uintptr_t*)snode->s_boxGoal);
 
 	hash += map_hash(snode->map);
 

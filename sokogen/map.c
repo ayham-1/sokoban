@@ -27,10 +27,10 @@ uint64_t map_hash(Map* map) {
 	uint64_t hash = 0;
 
 	for (int i = 0; i < map->arr.s; i++)
-		hash += sdbm_hash((uint8_t*)map->arr.rows[i].cols);
+		hash += sdbm_hash((uintptr_t*)map->arr.rows[i].cols);
 
-	hash += sdbm_hash((uint8_t*)map->boxPos);
-	hash += sdbm_hash((uint8_t*)map->s_boxPos);
+	hash += sdbm_hash((uintptr_t*)map->boxPos);
+	hash += sdbm_hash((uintptr_t*)map->s_boxPos);
 
 	return hash;
 }

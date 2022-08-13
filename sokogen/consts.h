@@ -62,6 +62,6 @@ typedef enum Direction {
 extern const axis DirectionOff[4][2];
 
 /* sdbm algorithm URL: http://www.cse.yorku.ca/~oz/hash.html */
-uint64_t sdbm_hash(uint8_t* dat);
+uint64_t sdbm_hash(uintptr_t* dat);
 
 #endif
