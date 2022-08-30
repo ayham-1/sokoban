@@ -124,5 +124,15 @@ void snode_post_process(NodeState* snode) {
 		else
 			snode->freezedMap->arr.rows[g_y].cols[g_x].tex = dock;
 	}
+}
+
+void snode_simulate(NodeState* snode) {
+	for (int i = 0; i < snode->s_nextActions; i++) {
+		Action* act = snode->nextActions[i];
+		act->fn(snode, act->args);
+	}
+}
+
+void snode_action_place_box(NodeState* snode, ActionArgs args) {
 
 }
