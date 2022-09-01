@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -5,6 +6,9 @@
 #include <sys/types.h>
 
 #include "nodestate.h"
+
+bool test_pos(NodeState* s, Pos p);
+size_t rand_lim(size_t limit);
 
 NodeState* snode_init(uint8_t width, uint8_t height) {
 	/* seed rand */
@@ -134,5 +138,34 @@ void snode_simulate(NodeState* snode) {
 }
 
 void snode_action_place_box(NodeState* snode, ActionArgs args) {
+	if (!test_pos(snode, args.pos))
+		return;
 
+	bool placed = false;
+	size_t x = 0, y= 0;
+	do {
+		x = rand_lim(snode->map->width);
+		y = rand_lim(snode->map->height);
+
+		if (snode->map->arr.rows[y].cols[x].tex != box)
+			snode->map->arr.rows[y].cols[x].tex = box;
+	} while (!placed);
+}
+
+bool test_pos(NodeState* state, Pos pos) {
+	if (pos.x >= 0 && pos.x <= state->map->width &&
+			pos.y >= 0 && pos.y <= state->map->height)
+		return true;
+	return false;
+}
+
+size_t rand_lim(size_t limit) {
+	size_t divisor = RAND_MAX/(limit+1);
+	size_t retval;
+
+	do { 
+		retval = rand() / divisor;
+	} while (retval > limit);
+
+	return retval;
 }
