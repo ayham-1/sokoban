@@ -147,8 +147,10 @@ void snode_action_place_box(NodeState* snode, ActionArgs args) {
 		x = rand_lim(snode->map->width);
 		y = rand_lim(snode->map->height);
 
-		if (snode->map->arr.rows[y].cols[x].tex != box)
+		if (snode->map->arr.rows[y].cols[x].tex != box) {
 			snode->map->arr.rows[y].cols[x].tex = box;
+			placed = true;
+		}
 	} while (!placed);
 }
 

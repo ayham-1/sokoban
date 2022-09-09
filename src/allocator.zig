@@ -10,7 +10,7 @@ var gpa = if (builtin.os.tag != .emscripten and builtin.os.tag != .wasi and buil
 pub const ZecsiAllocator =
     struct {
     const Self = @This();
-    pub fn allocator(_: *Self) Allocator {
+    pub fn allocator(_: *const Self) Allocator {
         return switch (builtin.os.tag) {
             .emscripten, .wasi => Allocator{
                 .ptr = undefined,
@@ -23,7 +23,7 @@ pub const ZecsiAllocator =
         };
     }
 
-    pub fn deinit(_: *Self) bool {
+    pub fn deinit(_: *const Self) bool {
         switch (builtin.os.tag) {
             .emscripten, .wasi => {
                 log.info("deinit not implemented for EmscriptenAllocator", .{});

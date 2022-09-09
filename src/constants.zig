@@ -13,14 +13,14 @@ pub const InvalidPos = error{InvalidPos};
 
 pub const Textile = struct { tex: TexType, id: TexId };
 pub const TexType = enum(u8) {
-    floor = '.',
-    wall = 'w',
-    dock = 'd',
-    box = 'b',
+    floor = ' ',
+    wall = '#',
+    dock = '.',
+    box = '$',
     boxDocked = 'x',
-    worker = 'p',
-    workerDocked = 'X',
-    none = '#',
+    worker = '@',
+    workerDocked = '2',
+    none = '0',
     next = '\n',
 
     // solves the problem of @intToEnum() having undefined behavior.
@@ -36,7 +36,9 @@ pub const TexType = enum(u8) {
             @enumToInt(TexType.workerDocked) => .workerDocked,
             @enumToInt(TexType.none) => .none,
             @enumToInt(TexType.next) => .next,
-            else => error.MapError,
+            else => {
+                return .next;
+            },
         };
     }
 };

@@ -2,6 +2,7 @@ const std = @import("std");
 const log = @import("log.zig");
 const raylib = @import("./raylib/raylib.zig");
 const soko = @import("constants.zig");
+const Levels = @import("levels.zig").Levels;
 
 const ZecsiAllocator = @import("allocator.zig").ZecsiAllocator;
 var zalloc = ZecsiAllocator{};
@@ -25,8 +26,9 @@ pub var workerInputStopped: bool = false;
 
 pub var won: bool = false;
 
-pub fn start(givenMap: Map) !void {
-    puzzle = Puzzle.init(alloc, givenMap);
+pub fn start() !void {
+    var levels = try Levels.init(alloc);
+    puzzle = Puzzle.init(alloc, try levels.getRandomLevel());
 
     screenWidth = (puzzle.map.sizeWidth * soko.texWidth) + 2 * soko.mapBorder;
     screenHeight = (puzzle.map.sizeHeight * soko.texHeight) + 2 * soko.mapBorder;

@@ -1,0 +1,9 @@
+These pre-generated puzzles are from this repository:
+https://github.com/deepmind/boxoban-levels
+
+@misc{boxobanlevels,
+author = {Arthur Guez, Mehdi Mirza, Karol Gregor, Rishabh Kabra, Sebastien Racaniere, Theophane Weber, David Raposo, Adam Santoro, Laurent Orseau, Tom Eccles, Greg Wayne, David Silver, Timothy Lillicrap, Victor Valdes},
+title = {An investigation of Model-free planning: boxoban levels},
+howpublished= {https://github.com/deepmind/boxoban-levels/},
+year = "2018",
+}

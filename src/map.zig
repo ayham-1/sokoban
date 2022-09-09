@@ -50,10 +50,9 @@ pub const Map = struct {
                 try self.displayed.append('\n');
             }
         }
-        //try self.displayed.append(0);
     }
 
-    pub fn build(self: *Map, givenMap: []u8) !void {
+    pub fn build(self: *Map, givenMap: []const u8) !void {
         var result = soko.MapArray.init(self.alloc);
         var line = soko.MapRowArray.init(self.alloc);
         defer line.deinit();

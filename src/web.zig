@@ -11,6 +11,8 @@ const ZecsiAllocator = @import("allocator.zig").ZecsiAllocator;
 const ray = @import("raylib/raylib.zig");
 const Map = @import("map.zig").Map;
 
+const Levels = @import("levels.zig").Levels;
+
 var zalloc = ZecsiAllocator{};
 var alloc = zalloc.allocator();
 
@@ -27,22 +29,8 @@ export fn emsc_set_window_size(width: c_int, height: c_int) callconv(.C) void {
 }
 
 fn safeMain() !c_int {
-    var testMap =
-        \\#www#www#wwwwww#
-        \\w...w...w......w
-        \\w.p.b.d........w
-        \\w.bdw..bw......w
-        \\wwwwwwwwwwwwwww#
-        \\
-    ;
-
-    var gameMap = try alloc.alloc(u8, testMap.len);
-    std.mem.copy(u8, gameMap, testMap);
-    var map = Map.init(alloc);
-    try map.build(gameMap);
-    try game.start(map);
+    try game.start();
     defer game.stop();
-    defer alloc.free(gameMap);
 
     updateMapView();
 
