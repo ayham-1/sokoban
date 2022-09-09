@@ -40,13 +40,21 @@ pub fn start() !void {
         raylib.SetTargetFPS(21);
     }
 
-    texFloor = raylib.LoadTexture("assets/floor.png");
-    texWall = raylib.LoadTexture("assets/wall.png");
-    texDock = raylib.LoadTexture("assets/dock.png");
-    texBox = raylib.LoadTexture("assets/box.png");
-    texBoxDocked = raylib.LoadTexture("assets/box-docked.png");
-    texWorker = raylib.LoadTexture("assets/worker.png");
-    texWorkerDocked = raylib.LoadTexture("assets/worker-docked.png");
+    const texFloorData = @embedFile("assets/floor.png");
+    const texWallData = @embedFile("assets/wall.png");
+    const texDockData = @embedFile("assets/dock.png");
+    const texBoxData = @embedFile("assets/box.png");
+    const texBoxDockedData = @embedFile("assets/box-docked.png");
+    const texWorkerData = @embedFile("assets/worker.png");
+    const texWorkerDockedData = @embedFile("assets/worker-docked.png");
+
+    texFloor = raylib.LoadTextureFromImage(raylib.LoadImageFromMemory(".png", texFloorData, texFloorData.len));
+    texWall = raylib.LoadTextureFromImage(raylib.LoadImageFromMemory(".png", texWallData, texWallData.len));
+    texDock = raylib.LoadTextureFromImage(raylib.LoadImageFromMemory(".png", texDockData, texDockData.len));
+    texBox = raylib.LoadTextureFromImage(raylib.LoadImageFromMemory(".png", texBoxData, texBoxData.len));
+    texBoxDocked = raylib.LoadTextureFromImage(raylib.LoadImageFromMemory(".png", texBoxDockedData, texBoxDockedData.len));
+    texWorker = raylib.LoadTextureFromImage(raylib.LoadImageFromMemory(".png", texWorkerData, texWorkerData.len));
+    texWorkerDocked = raylib.LoadTextureFromImage(raylib.LoadImageFromMemory(".png", texWorkerDockedData, texWorkerDockedData.len));
 }
 
 pub fn stop() void {
